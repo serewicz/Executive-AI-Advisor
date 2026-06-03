@@ -69,6 +69,12 @@ Current milestone:
 
 ## Local Development
 
+### Prerequisites
+
+- Python 3.12+
+- Docker Desktop
+- Git
+
 1. Copy the example environment file:
 
 ```bash
