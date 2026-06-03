@@ -1,10 +1,10 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
-DocumentStatus = Literal["uploaded", "parsed", "chunked", "embedded", "failed"]
+DocumentStatus = Literal["uploaded", "parsed", "chunked", "embedded", "indexed", "failed"]
 DocumentClassification = Literal["public", "internal", "confidential", "restricted"]
 DocumentSourceType = Literal[
     "sec_filing",
@@ -15,16 +15,10 @@ DocumentSourceType = Literal[
 
 
 class DocumentUploadRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    source: str | None = Field(default=None, max_length=512)
     source_type: DocumentSourceType = "technology_assessment"
     classification: DocumentClassification = "internal"
-    document_metadata: dict = Field(default_factory=dict)
 
 
 class DocumentUploadResponse(BaseModel):
-    id: UUID
-    title: str
-    source_type: DocumentSourceType
-    classification: DocumentClassification
+    document_id: UUID
     status: DocumentStatus

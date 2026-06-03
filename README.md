@@ -108,6 +108,24 @@ The FastAPI docs are available at:
 http://localhost:8000/docs
 ```
 
+Upload a PDF document:
+
+```bash
+curl -X POST http://localhost:8000/documents/upload \
+  -F "file=@/path/to/document.pdf;type=application/pdf" \
+  -F "source_type=board_material" \
+  -F "classification=confidential"
+```
+
+Expected response:
+
+```json
+{
+  "document_id": "...",
+  "status": "uploaded"
+}
+```
+
 ## Configuration
 
 Runtime configuration is loaded from environment variables and `.env` using `pydantic-settings`.
