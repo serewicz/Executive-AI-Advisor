@@ -1,0 +1,35 @@
+services:
+  api:
+    build: .
+    container_name: executive-ai-advisor-api
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: executive-ai-advisor-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-executive_ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-executive_ai_password}
+      POSTGRES_DB: ${POSTGRES_DB:-executive_ai_advisor}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-executive_ai} -d ${POSTGRES_DB:-executive_ai_advisor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
