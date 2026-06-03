@@ -27,8 +27,124 @@ The system ingests SEC filings, technology assessments, diligence reports, and o
 🚧 Early development
 
 Current milestone:
-- Repository initialized
-- Architecture and implementation planning underway
+- Initial FastAPI scaffold
+- PostgreSQL + pgvector local development stack
+- SQLAlchemy document and chunk models
+- Document status and governance metadata fields
+- Initial document upload request/response schemas
+- Health endpoint at `/health`
+
+## Project Structure
+
+```text
+.
+├── app
+│   ├── api
+│   │   ├── router.py
+│   │   └── routes
+│   │       └── health.py
+│   ├── core
+│   │   └── config.py
+│   ├── db
+│   │   ├── base.py
+│   │   └── session.py
+│   ├── models
+│   │   └── document.py
+│   ├── schemas
+│   │   └── document.py
+│   └── main.py
+├── data
+│   ├── processed
+│   └── uploads
+├── docs
+├── scripts
+│   └── init-db.sql
+├── tests
+│   └── test_health.py
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+└── .env.example
+```
+
+## Local Development
+
+1. Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+2. Start the API and database:
+
+```bash
+docker compose up --build
+```
+
+3. Check the API:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Expected response:
+
+```json
+{
+  "status": "ok",
+  "database": "ok"
+}
+```
+
+The FastAPI docs are available at:
+
+```text
+http://localhost:8000/docs
+```
+
+## Configuration
+
+Runtime configuration is loaded from environment variables and `.env` using `pydantic-settings`.
+
+Key variables:
+
+- `APP_NAME`
+- `APP_ENV`
+- `APP_DEBUG`
+- `DATABASE_URL`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_DB`
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+
+## Database
+
+Docker Compose uses the `pgvector/pgvector:pg16` image. The `scripts/init-db.sql` file enables the `vector` extension when the database is first created.
+
+Alembic migration scaffolding is included under `migrations/`.
+
+Create a migration after model changes:
+
+```bash
+alembic revision --autogenerate -m "describe change"
+```
+
+Apply migrations:
+
+```bash
+alembic upgrade head
+```
+
+The initial scaffold still creates SQLAlchemy tables on application startup for easy local bootstrapping. As the schema matures, startup table creation should be removed and Alembic should become the only schema-management path.
+
+## Testing
+
+Install dependencies locally, then run:
+
+```bash
+pytest
+```
 
 ## Roadmap
 
