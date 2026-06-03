@@ -87,7 +87,15 @@ cp .env.example .env
 docker compose up --build
 ```
 
-3. Check the API:
+Docker runs `alembic upgrade head` before starting the API so local databases receive the latest schema changes.
+
+3. For non-Docker local development, apply migrations before starting the API:
+
+```bash
+alembic upgrade head
+```
+
+4. Check the API:
 
 ```bash
 curl http://localhost:8000/health
@@ -106,6 +114,24 @@ The FastAPI docs are available at:
 
 ```text
 http://localhost:8000/docs
+```
+
+Upload a PDF document:
+
+```bash
+curl -X POST http://localhost:8000/documents/upload \
+  -F "file=@/path/to/document.pdf;type=application/pdf" \
+  -F "source_type=board_material" \
+  -F "classification=confidential"
+```
+
+Expected response:
+
+```json
+{
+  "document_id": "...",
+  "status": "uploaded"
+}
 ```
 
 ## Configuration
@@ -142,7 +168,7 @@ Apply migrations:
 alembic upgrade head
 ```
 
-The initial scaffold still creates SQLAlchemy tables on application startup for easy local bootstrapping. As the schema matures, startup table creation should be removed and Alembic should become the only schema-management path.
+Alembic is the source of truth for schema management. Apply migrations before running the API outside Docker.
 
 ## Testing
 

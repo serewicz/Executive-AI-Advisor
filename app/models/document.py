@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +11,20 @@ from app.db.session import Base
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('uploaded', 'parsed', 'chunked', 'embedded', 'indexed', 'failed')",
+            name="ck_documents_status",
+        ),
+        CheckConstraint(
+            "source_type IN ('sec_filing', 'diligence_report', 'technology_assessment', 'board_material')",
+            name="ck_documents_source_type",
+        ),
+        CheckConstraint(
+            "classification IN ('public', 'internal', 'confidential', 'restricted')",
+            name="ck_documents_classification",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True),
@@ -18,6 +32,8 @@ class Document(Base):
         default=uuid4,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    filename: Mapped[str | None] = mapped_column(String(255))
+    file_path: Mapped[str | None] = mapped_column(String(1024))
     source: Mapped[str | None] = mapped_column(String(512))
     document_type: Mapped[str | None] = mapped_column(String(100))
     source_type: Mapped[str] = mapped_column(String(100), default="technology_assessment", nullable=False)
@@ -25,6 +41,11 @@ class Document(Base):
     classification: Mapped[str] = mapped_column(String(50), default="internal", nullable=False)
     document_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
