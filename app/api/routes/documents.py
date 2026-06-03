@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
@@ -13,6 +12,8 @@ from app.schemas.document import DocumentClassification, DocumentSourceType, Doc
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+PDF_SIGNATURE = b"%PDF-"
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 @router.post(
@@ -40,13 +41,7 @@ def upload_document(
 
     document_id = uuid4()
     filename = Path(file.filename.replace("\\", "/")).name
-    stored_filename = f"{document_id}_{filename}"
-    upload_dir = settings.upload_dir
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / stored_filename
-
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    file_path = _save_pdf_upload(file, document_id, filename)
 
     document = Document(
         id=document_id,
@@ -70,3 +65,42 @@ def upload_document(
         raise
 
     return DocumentUploadResponse(document_id=document.id, status=document.status)
+
+
+def _save_pdf_upload(file: UploadFile, document_id, filename: str) -> Path:
+    upload_dir = settings.upload_dir
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    file_path = upload_dir / f"{document_id}_{filename}"
+    max_upload_bytes = settings.max_upload_mb * 1024 * 1024
+
+    signature = file.file.read(len(PDF_SIGNATURE))
+    if signature != PDF_SIGNATURE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is not a valid PDF.",
+        )
+
+    bytes_written = len(signature)
+    if bytes_written > max_upload_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Uploaded file exceeds the {settings.max_upload_mb} MB limit.",
+        )
+
+    try:
+        with file_path.open("wb") as buffer:
+            buffer.write(signature)
+
+            while chunk := file.file.read(UPLOAD_CHUNK_SIZE):
+                bytes_written += len(chunk)
+                if bytes_written > max_upload_bytes:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=f"Uploaded file exceeds the {settings.max_upload_mb} MB limit.",
+                    )
+                buffer.write(chunk)
+    except Exception:
+        file_path.unlink(missing_ok=True)
+        raise
+
+    return file_path

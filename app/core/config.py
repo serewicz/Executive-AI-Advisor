@@ -15,6 +15,7 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
     upload_dir: Path = Field(default=Path("data/uploads"), alias="UPLOAD_DIR")
+    max_upload_mb: int = Field(default=25, alias="MAX_UPLOAD_MB")
 
     model_config = SettingsConfigDict(
         env_file=".env",
