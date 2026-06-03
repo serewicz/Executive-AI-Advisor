@@ -30,6 +30,8 @@ Current milestone:
 - Initial FastAPI scaffold
 - PostgreSQL + pgvector local development stack
 - SQLAlchemy document and chunk models
+- Document status and governance metadata fields
+- Initial document upload request/response schemas
 - Health endpoint at `/health`
 
 ## Project Structure
@@ -47,6 +49,8 @@ Current milestone:
 │   │   ├── base.py
 │   │   └── session.py
 │   ├── models
+│   │   └── document.py
+│   ├── schemas
 │   │   └── document.py
 │   └── main.py
 ├── data
@@ -118,7 +122,21 @@ Key variables:
 
 Docker Compose uses the `pgvector/pgvector:pg16` image. The `scripts/init-db.sql` file enables the `vector` extension when the database is first created.
 
-The initial scaffold creates SQLAlchemy tables on application startup. As the schema matures, this should move to Alembic migrations.
+Alembic migration scaffolding is included under `migrations/`.
+
+Create a migration after model changes:
+
+```bash
+alembic revision --autogenerate -m "describe change"
+```
+
+Apply migrations:
+
+```bash
+alembic upgrade head
+```
+
+The initial scaffold still creates SQLAlchemy tables on application startup for easy local bootstrapping. As the schema matures, startup table creation should be removed and Alembic should become the only schema-management path.
 
 ## Testing
 
