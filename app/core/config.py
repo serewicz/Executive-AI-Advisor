@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     app_debug: bool = True
 
     database_url: str = Field(
-        default="postgresql+psycopg://executive_ai:executive_ai_password@localhost:5432/executive_ai_advisor",
+        default="postgresql+psycopg://executive_ai:change_me_in_local_development@localhost:5432/executive_ai_advisor",
         alias="DATABASE_URL",
     )
 

@@ -18,7 +18,7 @@ services:
     container_name: executive-ai-advisor-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-executive_ai}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-executive_ai_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_local_development}
       POSTGRES_DB: ${POSTGRES_DB:-executive_ai_advisor}
     ports:
       - "5432:5432"

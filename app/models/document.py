@@ -20,6 +20,9 @@ class Document(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str | None] = mapped_column(String(512))
     document_type: Mapped[str | None] = mapped_column(String(100))
+    source_type: Mapped[str] = mapped_column(String(100), default="technology_assessment", nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="uploaded", nullable=False)
+    classification: Mapped[str] = mapped_column(String(50), default="internal", nullable=False)
     document_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
