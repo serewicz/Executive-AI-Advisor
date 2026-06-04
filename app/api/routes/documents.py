@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
@@ -40,7 +41,7 @@ def upload_document(
         )
 
     document_id = uuid4()
-    filename = Path(file.filename.replace("\\", "/")).name
+    filename = _sanitize_filename(file.filename)
     file_path = _save_pdf_upload(file, document_id, filename)
 
     document = Document(
@@ -64,7 +65,26 @@ def upload_document(
         file_path.unlink(missing_ok=True)
         raise
 
-    return DocumentUploadResponse(document_id=document.id, status=document.status)
+    return DocumentUploadResponse(
+        document_id=document.id,
+        filename=document.filename,
+        status=document.status,
+        source_type=document.source_type,
+        classification=document.classification,
+    )
+
+
+def _sanitize_filename(filename: str) -> str:
+    name = Path(filename.replace("\\", "/")).name
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("._")
+
+    if not safe_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file must include a valid filename.",
+        )
+
+    return safe_name
 
 
 def _save_pdf_upload(file: UploadFile, document_id, filename: str) -> Path:

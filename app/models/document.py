@@ -32,8 +32,8 @@ class Document(Base):
         default=uuid4,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    filename: Mapped[str | None] = mapped_column(String(255))
-    file_path: Mapped[str | None] = mapped_column(String(1024))
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     source: Mapped[str | None] = mapped_column(String(512))
     document_type: Mapped[str | None] = mapped_column(String(100))
     source_type: Mapped[str] = mapped_column(String(100), default="technology_assessment", nullable=False)

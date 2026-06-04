@@ -55,11 +55,16 @@ def test_document_upload_saves_pdf_metadata(monkeypatch, tmp_path):
         app.dependency_overrides.clear()
 
     assert response.status_code == 201
-    assert response.json()["status"] == "uploaded"
-    assert response.json()["document_id"]
+    response_body = response.json()
+    assert response_body["document_id"]
+    assert response_body["filename"] == "board-pack.pdf"
+    assert response_body["status"] == "uploaded"
+    assert response_body["source_type"] == "board_material"
+    assert response_body["classification"] == "confidential"
 
     assert fake_session.committed is True
     assert fake_session.document.filename == "board-pack.pdf"
+    assert fake_session.document.file_path
     assert fake_session.document.status == "uploaded"
     assert fake_session.document.source_type == "board_material"
     assert fake_session.document.classification == "confidential"

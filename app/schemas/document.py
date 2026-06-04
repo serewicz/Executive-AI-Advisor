@@ -21,4 +21,7 @@ class DocumentUploadRequest(BaseModel):
 
 class DocumentUploadResponse(BaseModel):
     document_id: UUID
+    filename: str
     status: DocumentStatus
+    source_type: DocumentSourceType
+    classification: DocumentClassification
