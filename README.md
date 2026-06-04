@@ -178,6 +178,43 @@ Install dependencies locally, then run:
 pytest
 ```
 
+## Supply Chain Provenance
+
+Release and manual builds generate SLSA provenance for the Dockerized Executive AI Advisor service.
+
+The workflow:
+
+- Builds the Docker image artifact
+- Generates SLSA L3 provenance using the OpenSSF SLSA GitHub Generator
+- Uploads the Docker image artifact to the workflow run
+- Uploads the `.intoto.jsonl` provenance file to the workflow run artifacts
+- Attaches provenance to GitHub Release assets for `release:created` events
+
+Create a test release:
+
+```bash
+git tag v0.0.1-slsa-test
+git push origin v0.0.1-slsa-test
+```
+
+Then create a GitHub Release for the tag. Check:
+
+- Workflow run Artifacts tab for `executive-ai-advisor-image`
+- Workflow run Artifacts tab for `executive-ai-advisor-slsa-provenance`
+- Release assets for `executive-ai-advisor-image.tar`
+- Release assets for `executive-ai-advisor-image.intoto.jsonl`
+
+Verify provenance with `slsa-verifier`:
+
+```bash
+slsa-verifier verify-artifact executive-ai-advisor-image.tar \
+  --provenance-path executive-ai-advisor-image.intoto.jsonl \
+  --source-uri github.com/serewicz/Executive-AI-Advisor \
+  --source-tag v0.0.1-slsa-test
+```
+
+All release builds produce verifiable SLSA L3 provenance for the Dockerized RAG service, supporting SOC 2 evidence collection and immutable audit trails.
+
 ## Roadmap
 
 ### Phase 1

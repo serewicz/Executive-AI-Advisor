@@ -1,66 +1,96 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+name: SLSA provenance
 
-# This workflow lets you generate SLSA provenance file for your project.
-# The generation satisfies level 3 for the provenance requirements - see https://slsa.dev/spec/v0.1/requirements
-# The project is an initiative of the OpenSSF (openssf.org) and is developed at
-# https://github.com/slsa-framework/slsa-github-generator.
-# The provenance file can be verified using https://github.com/slsa-framework/slsa-verifier.
-# For more information about SLSA and how it improves the supply-chain, visit slsa.dev.
-
-name: SLSA generic generator
 on:
   workflow_dispatch:
   release:
     types: [created]
 
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: executive-ai-advisor
+  IMAGE_TAR: executive-ai-advisor-image.tar
+  IMAGE_ARTIFACT_NAME: executive-ai-advisor-image
+  PROVENANCE_ARTIFACT_NAME: executive-ai-advisor-slsa-provenance
+
 jobs:
   build:
+    name: Build Docker service artifact
     runs-on: ubuntu-latest
     outputs:
-      digests: ${{ steps.hash.outputs.digests }}
+      base64-subjects: ${{ steps.hash.outputs.base64-subjects }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-      # ========================================================
-      #
-      # Step 1: Build your artifacts.
-      #
-      # ========================================================
-      - name: Build artifacts
-        run: |
-            # These are some amazing artifacts.
-            echo "artifact1" > artifact1
-            echo "artifact2" > artifact2
+      - name: Build Docker image
+        run: docker build --tag "${IMAGE_NAME}:${GITHUB_SHA}" .
 
-      # ========================================================
-      #
-      # Step 2: Add a step to generate the provenance subjects
-      #         as shown below. Update the sha256 sum arguments
-      #         to include all binaries that you generate
-      #         provenance for.
-      #
-      # ========================================================
-      - name: Generate subject for provenance
+      - name: Export Docker image artifact
+        run: docker save "${IMAGE_NAME}:${GITHUB_SHA}" --output "${IMAGE_TAR}"
+
+      - name: Generate SLSA provenance subject
         id: hash
         run: |
           set -euo pipefail
+          echo "base64-subjects=$(sha256sum "${IMAGE_TAR}" | base64 -w0)" >> "${GITHUB_OUTPUT}"
 
-          # List the artifacts the provenance will refer to.
-          files=$(ls artifact*)
-          # Generate the subjects (base64 encoded).
-          echo "hashes=$(sha256sum $files | base64 -w0)" >> "${GITHUB_OUTPUT}"
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.IMAGE_ARTIFACT_NAME }}
+          path: ${{ env.IMAGE_TAR }}
+          if-no-files-found: error
+          retention-days: 14
 
   provenance:
+    name: Generate SLSA L3 provenance
     needs: [build]
     permissions:
-      actions: read   # To read the workflow path.
-      id-token: write # To sign the provenance.
-      contents: write # To add assets to a release.
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.4.0
+      actions: read
+      id-token: write
+      contents: write
+    uses: ./.github/workflows/reusable-slsa-provenance.yml
     with:
-      base64-subjects: "${{ needs.build.outputs.digests }}"
-      upload-assets: true # Optional: Upload to a new release
+      base64-subjects: ${{ needs.build.outputs.base64-subjects }}
+      upload-assets: ${{ github.event_name == 'release' }}
+      provenance-name: executive-ai-advisor-image.intoto.jsonl
+
+  provenance-artifact:
+    name: Persist provenance artifact
+    needs: [provenance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download generated provenance
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.provenance.outputs.provenance-name }}
+          path: provenance
+
+      - name: Upload provenance artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROVENANCE_ARTIFACT_NAME }}
+          path: provenance/*.intoto.jsonl
+          if-no-files-found: error
+          retention-days: 90
+
+  release-assets:
+    name: Attach build artifact to release
+    needs: [build, provenance]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    steps:
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.IMAGE_ARTIFACT_NAME }}
+
+      - name: Attach Docker image to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" "${IMAGE_TAR}" --clobber

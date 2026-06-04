@@ -1,0 +1,35 @@
+name: Reusable SLSA provenance
+
+on:
+  workflow_call:
+    inputs:
+      base64-subjects:
+        description: Base64-encoded sha256sum subjects for generated provenance.
+        required: true
+        type: string
+      upload-assets:
+        description: Upload provenance to GitHub Release assets.
+        required: false
+        default: false
+        type: boolean
+      provenance-name:
+        description: Name for the generated in-toto provenance file.
+        required: false
+        default: provenance.intoto.jsonl
+        type: string
+    outputs:
+      provenance-name:
+        description: Name of the generated provenance artifact.
+        value: ${{ jobs.generate.outputs.provenance-name }}
+
+jobs:
+  generate:
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.4.0
+    with:
+      base64-subjects: ${{ inputs.base64-subjects }}
+      upload-assets: ${{ inputs.upload-assets }}
+      provenance-name: ${{ inputs.provenance-name }}
