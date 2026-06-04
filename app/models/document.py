@@ -77,7 +77,7 @@ class ParsedDocumentPage(Base):
     )
     page_number: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    page_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
+    page_metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

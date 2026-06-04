@@ -30,6 +30,9 @@ def parse_uploaded_document(document_id: UUID, db: Session) -> Document:
 
     try:
         parsed_pages = parse_pdf(document.id, document.file_path)
+        if not parsed_pages:
+            raise PDFParsingError("No text pages were parsed from the PDF.")
+
         db.execute(delete(ParsedDocumentPage).where(ParsedDocumentPage.document_id == document.id))
         db.add_all(
             [
@@ -51,6 +54,7 @@ def parse_uploaded_document(document_id: UUID, db: Session) -> Document:
         db.refresh(document)
         return document
     except Exception as exc:
+        db.rollback()
         document.status = "failed"
         document.document_metadata = {
             **(document.document_metadata or {}),
