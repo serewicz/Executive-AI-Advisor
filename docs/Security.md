@@ -14,6 +14,8 @@ The SLSA workflow supports:
 - Verification with `slsa-verifier`
 - Evidence collection for SOC 2-style change management and immutable audit trails
 
+The workflow pins current first-party GitHub Actions that run on the Node.js 24 runtime and uses the OpenSSF SLSA GitHub Generator `v2.1.0` release.
+
 This matters because Executive AI Advisor will ingest sensitive board materials, diligence reports, SEC filings, and technology assessments. The deployment pipeline must show not only what code was shipped, but where the artifact came from and how it was built.
 
 ## Verification

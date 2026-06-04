@@ -185,7 +185,7 @@ Release and manual builds generate SLSA provenance for the Dockerized Executive 
 The workflow:
 
 - Builds the Docker image artifact
-- Generates SLSA L3 provenance using the OpenSSF SLSA GitHub Generator
+- Generates SLSA L3 provenance using the OpenSSF SLSA GitHub Generator pinned to `v2.1.0`
 - Uploads the Docker image artifact to the workflow run
 - Uploads the `.intoto.jsonl` provenance file to the workflow run artifacts
 - Attaches provenance to GitHub Release assets for `release:created` events
