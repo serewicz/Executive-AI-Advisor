@@ -8,6 +8,8 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app/app
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./migrations:/app/migrations
       - ./data:/app/data
     depends_on:
       db:
