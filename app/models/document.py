@@ -13,7 +13,7 @@ class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('uploaded', 'parsed', 'chunked', 'embedded', 'indexed', 'failed')",
+            "status IN ('uploaded', 'parsing', 'parsed', 'chunked', 'embedded', 'indexed', 'failed')",
             name="ck_documents_status",
         ),
         CheckConstraint(
@@ -55,6 +55,36 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
     )
+    pages: Mapped[list["ParsedDocumentPage"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="ParsedDocumentPage.page_number",
+    )
+
+
+class ParsedDocumentPage(Base):
+    __tablename__ = "parsed_document_pages"
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    page_metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    document: Mapped[Document] = relationship(back_populates="pages")
 
 
 class DocumentChunk(Base):

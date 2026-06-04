@@ -137,6 +137,53 @@ Expected response:
 }
 ```
 
+## PDF Parsing
+
+Uploaded PDFs can be parsed into page-aware text records.
+
+Parsing behavior:
+
+- Uses Docling as the preferred PDF parser
+- Falls back to `pypdf` for simple text extraction when Docling fails
+- Preserves page numbers where the parser exposes them
+- Normalizes whitespace
+- Skips empty pages
+- Stores parsed text in `parsed_document_pages`
+- Updates document status from `uploaded` to `parsing` to `parsed`
+- Updates document status to `failed` and records `parse_error` in `document_metadata` if parsing fails
+
+Trigger parsing for an uploaded document:
+
+```bash
+curl -X POST http://localhost:8000/documents/{document_id}/parse
+```
+
+Expected response:
+
+```json
+{
+  "document_id": "...",
+  "status": "parsed",
+  "pages_parsed": 12
+}
+```
+
+Fetch parsed page previews:
+
+```bash
+curl http://localhost:8000/documents/{document_id}/pages
+```
+
+Each page preview is limited to 1,000 characters.
+
+Current limitations:
+
+- Parsing is synchronous
+- No chunking yet
+- No embeddings yet
+- No LLM calls yet
+- No OCR tuning yet
+
 ## Configuration
 
 Runtime configuration is loaded from environment variables and `.env` using `pydantic-settings`.
