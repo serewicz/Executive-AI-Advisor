@@ -17,6 +17,11 @@ on:
         required: false
         default: provenance.intoto.jsonl
         type: string
+      private-repository:
+        description: Allow private repositories to publish SLSA provenance to the public transparency log.
+        required: false
+        default: false
+        type: boolean
     outputs:
       provenance-name:
         description: Name of the generated provenance artifact.
@@ -33,3 +38,4 @@ jobs:
       base64-subjects: ${{ inputs.base64-subjects }}
       upload-assets: ${{ inputs.upload-assets }}
       provenance-name: ${{ inputs.provenance-name }}
+      private-repository: ${{ inputs.private-repository }}

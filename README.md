@@ -188,6 +188,7 @@ The workflow:
 - Generates SLSA L3 provenance using the OpenSSF SLSA GitHub Generator pinned to `v2.1.0`
 - Uploads the Docker image artifact to the workflow run
 - Uploads the `.intoto.jsonl` provenance file to the workflow run artifacts
+- Creates a native GitHub Artifact Attestation for the Docker image artifact
 - Attaches provenance to GitHub Release assets for `release:created` events
 
 Create a test release:
@@ -201,6 +202,7 @@ Then create a GitHub Release for the tag. Check:
 
 - Workflow run Artifacts tab for `executive-ai-advisor-image`
 - Workflow run Artifacts tab for `executive-ai-advisor-slsa-provenance`
+- Workflow run Artifacts tab for `executive-ai-advisor-github-attestations`
 - Release assets for `executive-ai-advisor-image.tar`
 - Release assets for `executive-ai-advisor-image.intoto.jsonl`
 
@@ -212,6 +214,15 @@ slsa-verifier verify-artifact executive-ai-advisor-image.tar \
   --source-uri github.com/serewicz/Executive-AI-Advisor \
   --source-tag v0.0.1-slsa-test
 ```
+
+Verify the native GitHub Artifact Attestation:
+
+```bash
+gh attestation verify executive-ai-advisor-image.tar \
+  --repo serewicz/Executive-AI-Advisor
+```
+
+Attestation creation requires the workflow permissions `id-token: write`, `attestations: write`, and `artifact-metadata: write`. GitHub Artifact Attestations are available for public repositories on current GitHub plans; private and internal repositories require GitHub Enterprise Cloud. SLSA provenance for private repositories is explicitly opted into and publishes the repository name to the public transparency log.
 
 All release builds produce verifiable SLSA L3 provenance for the Dockerized RAG service, supporting SOC 2 evidence collection and immutable audit trails.
 
