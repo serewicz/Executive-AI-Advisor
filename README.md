@@ -130,7 +130,10 @@ Expected response:
 ```json
 {
   "document_id": "...",
-  "status": "uploaded"
+  "filename": "document.pdf",
+  "status": "uploaded",
+  "source_type": "board_material",
+  "classification": "confidential"
 }
 ```
 
