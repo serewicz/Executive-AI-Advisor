@@ -1,15 +1,25 @@
 import re
 from pathlib import Path
 from typing import Annotated
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.dependencies import get_db
-from app.models.document import Document
-from app.schemas.document import DocumentClassification, DocumentSourceType, DocumentUploadResponse
+from app.ingestion.parser import PDFParsingError
+from app.ingestion.pipeline import DocumentNotFoundError, InvalidDocumentStatusError, parse_uploaded_document
+from app.models.document import Document, ParsedDocumentPage
+from app.schemas.document import (
+    DocumentClassification,
+    DocumentPagePreview,
+    DocumentPagesResponse,
+    DocumentParseResponse,
+    DocumentSourceType,
+    DocumentUploadResponse,
+)
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -71,6 +81,49 @@ def upload_document(
         status=document.status,
         source_type=document.source_type,
         classification=document.classification,
+    )
+
+
+@router.post("/{document_id}/parse", response_model=DocumentParseResponse)
+def parse_document(document_id: UUID, db: Session = Depends(get_db)) -> DocumentParseResponse:
+    try:
+        document = parse_uploaded_document(document_id, db)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidDocumentStatusError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except PDFParsingError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    pages_parsed = (document.document_metadata or {}).get("pages_parsed", 0)
+    return DocumentParseResponse(
+        document_id=document.id,
+        status=document.status,
+        pages_parsed=pages_parsed,
+    )
+
+
+@router.get("/{document_id}/pages", response_model=DocumentPagesResponse)
+def get_document_pages(document_id: UUID, db: Session = Depends(get_db)) -> DocumentPagesResponse:
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    pages = db.scalars(
+        select(ParsedDocumentPage)
+        .where(ParsedDocumentPage.document_id == document.id)
+        .order_by(ParsedDocumentPage.page_number)
+    ).all()
+
+    return DocumentPagesResponse(
+        document_id=document.id,
+        pages=[
+            DocumentPagePreview(page_number=page.page_number, text_preview=page.text[:1000])
+            for page in pages
+        ],
     )
 
 
