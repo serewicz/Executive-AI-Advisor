@@ -9,10 +9,12 @@ permissions:
   contents: read
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   IMAGE_NAME: executive-ai-advisor
   IMAGE_TAR: executive-ai-advisor-image.tar
   IMAGE_ARTIFACT_NAME: executive-ai-advisor-image
   PROVENANCE_ARTIFACT_NAME: executive-ai-advisor-slsa-provenance
+  GITHUB_ATTESTATION_ARTIFACT_NAME: executive-ai-advisor-github-attestations
 
 jobs:
   build:
@@ -57,6 +59,43 @@ jobs:
       base64-subjects: ${{ needs.build.outputs.base64-subjects }}
       upload-assets: ${{ github.event_name == 'release' }}
       provenance-name: executive-ai-advisor-image.intoto.jsonl
+      private-repository: ${{ github.event.repository.private }}
+
+  github-attestation:
+    name: Create GitHub artifact attestation
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ env.IMAGE_ARTIFACT_NAME }}
+
+      - name: Create GitHub artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ env.IMAGE_TAR }}
+
+      - name: Collect GitHub attestation files
+        run: |
+          set -euo pipefail
+          mkdir -p github-attestations
+          while IFS= read -r attestation_path; do
+            cp "${attestation_path}" github-attestations/
+          done < "${RUNNER_TEMP}/created_attestation_paths.txt"
+
+      - name: Upload GitHub attestation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.GITHUB_ATTESTATION_ARTIFACT_NAME }}
+          path: github-attestations/*
+          if-no-files-found: error
+          retention-days: 90
 
   provenance-artifact:
     name: Persist provenance artifact
@@ -79,7 +118,7 @@ jobs:
 
   release-assets:
     name: Attach build artifact to release
-    needs: [build, provenance]
+    needs: [build, provenance, github-attestation]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     permissions:
