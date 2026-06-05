@@ -299,6 +299,34 @@ Cost and abuse controls:
 - `MAX_SEARCH_QUERY_CHARS` caps semantic search query size
 - `top_k` is capped at 20
 
+## Cited Executive Q&A
+
+Executive Q&A uses semantic search first, then asks the configured LLM provider to answer using only the retrieved chunks.
+
+Q&A behavior:
+
+- Retrieves relevant chunks with pgvector semantic search
+- Formats retrieved chunks as numbered sources like `[S1]`, `[S2]`, and `[S3]`
+- Requires answers to cite material claims using source labels
+- Returns citation metadata with document IDs, chunk IDs, excerpts, and page ranges
+- Defaults to `LLM_PROVIDER=mock` so local development and tests do not require an OpenAI key
+- Can use OpenAI later with `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, and `OPENAI_CHAT_MODEL`
+
+Ask an executive question:
+
+```bash
+curl -X POST http://localhost:8000/advisor/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What are the main technology risks?",
+    "top_k": 5,
+    "source_type": null,
+    "classification": null
+  }'
+```
+
+The mock provider returns deterministic cited answers for local development. Real answer generation can be enabled later without changing the retrieval pipeline.
+
 ## Configuration
 
 Runtime configuration is loaded from environment variables and `.env` using `pydantic-settings`.
@@ -315,6 +343,8 @@ Key variables:
 - `POSTGRES_HOST`
 - `POSTGRES_PORT`
 - `OPENAI_API_KEY`
+- `LLM_PROVIDER`
+- `OPENAI_CHAT_MODEL`
 - `EMBEDDING_PROVIDER`
 - `LOCAL_EMBEDDING_MODEL`
 - `OPENAI_EMBEDDING_MODEL`
