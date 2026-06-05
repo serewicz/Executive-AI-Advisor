@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     )
     upload_dir: Path = Field(default=Path("data/uploads"), alias="UPLOAD_DIR")
     max_upload_mb: int = Field(default=25, alias="MAX_UPLOAD_MB")
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    embedding_model: str = Field(default="text-embedding-3-small", alias="EMBEDDING_MODEL")
+    max_embedding_chunks_per_request: int = Field(default=200, alias="MAX_EMBEDDING_CHUNKS_PER_REQUEST")
+    max_embedding_text_chars: int = Field(default=12000, alias="MAX_EMBEDDING_TEXT_CHARS")
+    max_search_query_chars: int = Field(default=2000, alias="MAX_SEARCH_QUERY_CHARS")
 
     model_config = SettingsConfigDict(
         env_file=".env",

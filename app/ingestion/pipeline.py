@@ -3,7 +3,9 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.ingestion.chunker import chunk_document_pages
+from app.ingestion.embedder import EmbeddingError, embed_texts
 from app.ingestion.parser import PDFParsingError, parse_pdf
 from app.models.document import Document, DocumentChunk, ParsedDocumentPage
 
@@ -117,3 +119,51 @@ def chunk_parsed_document(document_id: UUID, db: Session) -> Document:
         }
         db.commit()
         raise RuntimeError(f"Failed to chunk document {document_id}: {exc}") from exc
+
+
+def embed_document_chunks(document_id: UUID, db: Session) -> Document:
+    document = db.get(Document, document_id)
+    if document is None:
+        raise DocumentNotFoundError(f"Document not found: {document_id}")
+
+    if document.status not in {"chunked", "embedded"}:
+        raise InvalidDocumentStatusError(
+            f"Document {document_id} cannot be embedded from status {document.status}."
+        )
+
+    try:
+        chunks = db.scalars(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == document.id)
+            .order_by(DocumentChunk.chunk_index)
+        ).all()
+        chunks_without_embeddings = [chunk for chunk in chunks if chunk.embedding is None]
+        if len(chunks_without_embeddings) > settings.max_embedding_chunks_per_request:
+            raise EmbeddingError(
+                "Document has "
+                f"{len(chunks_without_embeddings)} chunks without embeddings, "
+                f"exceeding the per-request limit of {settings.max_embedding_chunks_per_request}."
+            )
+
+        if chunks_without_embeddings:
+            embeddings = embed_texts([chunk.content for chunk in chunks_without_embeddings])
+            for chunk, embedding in zip(chunks_without_embeddings, embeddings, strict=True):
+                chunk.embedding = embedding
+
+        document.status = "embedded"
+        document.document_metadata = {
+            **(document.document_metadata or {}),
+            "chunks_embedded": len(chunks_without_embeddings),
+        }
+        db.commit()
+        db.refresh(document)
+        return document
+    except Exception as exc:
+        db.rollback()
+        document.status = "failed"
+        document.document_metadata = {
+            **(document.document_metadata or {}),
+            "embedding_error": str(exc),
+        }
+        db.commit()
+        raise EmbeddingError(f"Failed to embed document {document_id}: {exc}") from exc

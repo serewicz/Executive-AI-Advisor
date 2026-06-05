@@ -49,6 +49,12 @@ class DocumentChunkResponse(BaseModel):
     chunks_created: int
 
 
+class DocumentEmbedResponse(BaseModel):
+    document_id: UUID
+    status: DocumentStatus
+    chunks_embedded: int
+
+
 class DocumentChunkPreview(BaseModel):
     chunk_index: int
     page_start: int
