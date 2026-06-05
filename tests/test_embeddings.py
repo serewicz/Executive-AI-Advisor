@@ -4,7 +4,13 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.db.dependencies import get_db
-from app.ingestion.embedder import EmbeddingError, embed_texts
+from app.ingestion.embedder import (
+    EmbeddingError,
+    OpenAIEmbeddingProvider,
+    SentenceTransformerEmbeddingProvider,
+    embed_texts,
+    get_embedding_provider,
+)
 from app.ingestion.pipeline import InvalidDocumentStatusError, embed_document_chunks
 from app.main import app
 from app.models.document import Document, DocumentChunk
@@ -174,3 +180,32 @@ def test_embed_texts_rejects_oversized_input(monkeypatch):
         assert "character limit" in str(exc)
     else:
         raise AssertionError("Expected EmbeddingError")
+
+
+def test_default_embedding_provider_is_local(monkeypatch):
+    monkeypatch.setattr(settings, "embedding_provider", "local")
+
+    provider = get_embedding_provider()
+
+    assert isinstance(provider, SentenceTransformerEmbeddingProvider)
+
+
+def test_embedding_provider_can_use_openai(monkeypatch):
+    monkeypatch.setattr(settings, "embedding_provider", "openai")
+
+    provider = get_embedding_provider()
+
+    assert isinstance(provider, OpenAIEmbeddingProvider)
+
+
+def test_embed_texts_uses_configured_provider(monkeypatch):
+    monkeypatch.setattr(settings, "embedding_provider", "local")
+    monkeypatch.setattr(
+        SentenceTransformerEmbeddingProvider,
+        "embed_texts",
+        lambda self, texts: [[0.3] * settings.embedding_dimensions for _ in texts],
+    )
+
+    embeddings = embed_texts(["  local   embedding  "])
+
+    assert embeddings == [[0.3] * settings.embedding_dimensions]
