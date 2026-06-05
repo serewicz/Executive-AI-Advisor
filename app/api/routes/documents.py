@@ -14,6 +14,7 @@ from app.ingestion.pipeline import (
     DocumentNotFoundError,
     InvalidDocumentStatusError,
     chunk_parsed_document,
+    embed_document_chunks,
     parse_uploaded_document,
 )
 from app.models.document import Document, DocumentChunk, ParsedDocumentPage
@@ -22,6 +23,7 @@ from app.schemas.document import (
     DocumentChunkResponse,
     DocumentChunksResponse,
     DocumentClassification,
+    DocumentEmbedResponse,
     DocumentPagePreview,
     DocumentPagesResponse,
     DocumentParseResponse,
@@ -127,6 +129,25 @@ def chunk_document(document_id: UUID, db: Session = Depends(get_db)) -> Document
         document_id=document.id,
         status=document.status,
         chunks_created=chunks_created,
+    )
+
+
+@router.post("/{document_id}/embed", response_model=DocumentEmbedResponse)
+def embed_document(document_id: UUID, db: Session = Depends(get_db)) -> DocumentEmbedResponse:
+    try:
+        document = embed_document_chunks(document_id, db)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidDocumentStatusError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    chunks_embedded = (document.document_metadata or {}).get("chunks_embedded", 0)
+    return DocumentEmbedResponse(
+        document_id=document.id,
+        status=document.status,
+        chunks_embedded=chunks_embedded,
     )
 
 

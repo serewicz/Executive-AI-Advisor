@@ -225,9 +225,51 @@ Each chunk preview is limited to 1,000 characters.
 Current limitations:
 
 - Simple token estimation only
-- No embeddings yet
-- No vector search yet
 - No LLM calls yet
+
+## Semantic Search
+
+Chunk embeddings can be generated and stored in PostgreSQL using pgvector.
+
+Embedding behavior:
+
+- Requires `OPENAI_API_KEY` in the environment
+- Uses `text-embedding-3-small` by default
+- Loads chunk content in `chunk_index` order
+- Skips chunks that already have embeddings
+- Stores vectors on `document_chunks.embedding`
+- Updates document status to `embedded`
+
+Trigger embedding for a chunked document:
+
+```bash
+curl -X POST http://localhost:8000/documents/{document_id}/embed
+```
+
+Expected response:
+
+```json
+{
+  "document_id": "...",
+  "status": "embedded",
+  "chunks_embedded": 8
+}
+```
+
+Search embedded chunks:
+
+```bash
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the main technology risks?",
+    "top_k": 5,
+    "source_type": null,
+    "classification": null
+  }'
+```
+
+Search returns cited chunk previews with page references and document governance metadata. It does not generate LLM answers yet.
 
 ## Configuration
 
@@ -244,6 +286,8 @@ Key variables:
 - `POSTGRES_DB`
 - `POSTGRES_HOST`
 - `POSTGRES_PORT`
+- `OPENAI_API_KEY`
+- `EMBEDDING_MODEL`
 
 ## Database
 
