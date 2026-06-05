@@ -1,10 +1,35 @@
+from uuid import UUID
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.advisor.prompts import SYSTEM_PROMPT, build_user_prompt
+from app.advisor.prompts import (
+    BOARD_SUMMARY_SYSTEM_PROMPT,
+    SUMMARY_TYPE_QUERIES,
+    SYSTEM_PROMPT,
+    build_board_summary_prompt,
+    build_user_prompt,
+)
 from app.advisor.providers.base import SourceContext
 from app.advisor.providers.factory import get_llm_provider
-from app.advisor.schemas import AdvisorAskResponse, AdvisorCitation
-from app.retrieval.vector_search import search_similar_chunks
+from app.advisor.schemas import (
+    AdvisorAskResponse,
+    AdvisorCitation,
+    BoardMemo,
+    BoardSummaryResponse,
+    Citation,
+    SummaryType,
+)
+from app.models.document import Document, DocumentChunk
+from app.retrieval.vector_search import SearchResult, search_similar_chunks
+
+
+class AdvisorDocumentNotFoundError(ValueError):
+    pass
+
+
+class AdvisorValidationError(ValueError):
+    pass
 
 
 def answer_executive_question(
@@ -68,3 +93,118 @@ def answer_executive_question(
         confidence=llm_response.confidence,  # type: ignore[arg-type]
         limitations=limitations,
     )
+
+
+def generate_board_summary(
+    document_id: UUID,
+    summary_type: SummaryType,
+    top_k: int,
+    db: Session,
+) -> BoardSummaryResponse:
+    document = db.get(Document, document_id)
+    if document is None:
+        raise AdvisorDocumentNotFoundError("Document not found.")
+
+    if document.status not in {"chunked", "embedded", "indexed"}:
+        raise AdvisorValidationError("Document must be chunked or embedded before board summary generation.")
+
+    results = _retrieve_summary_chunks(document=document, summary_type=summary_type, top_k=top_k, db=db)
+    if not results:
+        raise AdvisorValidationError("Document has no chunks to summarize.")
+
+    source_contexts = [
+        SourceContext(
+            label=f"[S{index}]",
+            content=result.content,
+            document_title=result.document_title,
+            page_start=result.page_start,
+            page_end=result.page_end,
+        )
+        for index, result in enumerate(results, start=1)
+    ]
+    citations = [
+        Citation(
+            source_label=f"S{index}",
+            document_id=result.document_id,
+            document_title=result.document_title,
+            chunk_id=result.chunk_id,
+            page_start=result.page_start,
+            page_end=result.page_end,
+            excerpt=result.content[:1000],
+        )
+        for index, result in enumerate(results, start=1)
+    ]
+
+    provider = get_llm_provider()
+    llm_response = provider.generate_board_summary(
+        summary_type=summary_type,
+        sources=source_contexts,
+        system_prompt=BOARD_SUMMARY_SYSTEM_PROMPT,
+        user_prompt=build_board_summary_prompt(summary_type, source_contexts),
+    )
+
+    return BoardSummaryResponse(
+        document_id=document.id,
+        summary_type=summary_type,
+        memo=BoardMemo(
+            executive_summary=llm_response.executive_summary,
+            key_risks=llm_response.key_risks,
+            evidence=llm_response.evidence,
+            board_questions=llm_response.board_questions,
+            recommended_actions=llm_response.recommended_actions,
+            limitations=llm_response.limitations,
+        ),
+        citations=citations,
+        confidence=llm_response.confidence,  # type: ignore[arg-type]
+    )
+
+
+def _retrieve_summary_chunks(
+    document: Document,
+    summary_type: str,
+    top_k: int,
+    db: Session,
+) -> list[SearchResult]:
+    if document.status in {"embedded", "indexed"}:
+        try:
+            results = search_similar_chunks(
+                query=SUMMARY_TYPE_QUERIES[summary_type],
+                db=db,
+                top_k=top_k,
+                document_id=document.id,
+            )
+        except Exception:
+            results = []
+
+        if results:
+            return results
+
+    return _load_ordered_chunks(document=document, top_k=top_k, db=db)
+
+
+def _load_ordered_chunks(document: Document, top_k: int, db: Session) -> list[SearchResult]:
+    statement = (
+        select(DocumentChunk)
+        .where(DocumentChunk.document_id == document.id)
+        .order_by(DocumentChunk.chunk_index)
+        .limit(top_k)
+    )
+    chunks = db.scalars(statement).all()
+    document_title = document.title or document.filename
+
+    return [
+        SearchResult(
+            document_id=document.id,
+            document_title=document_title,
+            chunk_id=chunk.id,
+            chunk_index=chunk.chunk_index,
+            content=chunk.content,
+            page_start=chunk.page_start,
+            page_end=chunk.page_end,
+            similarity_score=0.0,
+            source_type=document.source_type,
+            classification=document.classification,
+        )
+        for chunk in chunks
+        if " ".join(chunk.content.split())
+    ]

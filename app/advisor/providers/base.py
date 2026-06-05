@@ -14,6 +14,17 @@ class LLMResponse:
 
 
 @dataclass(frozen=True)
+class BoardMemoResponse:
+    executive_summary: str
+    key_risks: list[str]
+    evidence: list[str]
+    board_questions: list[str]
+    recommended_actions: list[str]
+    limitations: list[str]
+    confidence: str
+
+
+@dataclass(frozen=True)
 class SourceContext:
     label: str
     content: str
@@ -31,4 +42,14 @@ class LLMProvider(ABC):
         system_prompt: str,
         user_prompt: str,
     ) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    def generate_board_summary(
+        self,
+        summary_type: str,
+        sources: list[SourceContext],
+        system_prompt: str,
+        user_prompt: str,
+    ) -> BoardMemoResponse:
         pass

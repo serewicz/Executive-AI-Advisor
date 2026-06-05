@@ -8,6 +8,13 @@ from app.schemas.document import DocumentClassification, DocumentSourceType
 
 
 Confidence = Literal["high", "medium", "low"]
+SummaryType = Literal[
+    "technology_risk",
+    "diligence_summary",
+    "ai_readiness",
+    "security_governance",
+    "board_brief",
+]
 
 
 class AdvisorAskRequest(BaseModel):
@@ -32,3 +39,36 @@ class AdvisorAskResponse(BaseModel):
     citations: list[AdvisorCitation]
     confidence: Confidence
     limitations: list[str]
+
+
+class Citation(BaseModel):
+    source_label: str
+    document_id: UUID
+    document_title: str
+    chunk_id: UUID
+    page_start: int
+    page_end: int
+    excerpt: str
+
+
+class BoardMemo(BaseModel):
+    executive_summary: str
+    key_risks: list[str]
+    evidence: list[str]
+    board_questions: list[str]
+    recommended_actions: list[str]
+    limitations: list[str]
+
+
+class BoardSummaryRequest(BaseModel):
+    document_id: UUID
+    summary_type: SummaryType
+    top_k: int = Field(default=12, ge=3, le=25)
+
+
+class BoardSummaryResponse(BaseModel):
+    document_id: UUID
+    summary_type: SummaryType
+    memo: BoardMemo
+    citations: list[Citation]
+    confidence: Confidence

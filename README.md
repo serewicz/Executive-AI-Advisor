@@ -327,6 +327,46 @@ curl -X POST http://localhost:8000/advisor/ask \
 
 The mock provider returns deterministic cited answers for local development. Real answer generation can be enabled later without changing the retrieval pipeline.
 
+## Board-Level Summary Generator
+
+The board summary endpoint creates a structured memo from an existing document's chunks. It is grounded in retrieved source chunks and returns separate citation metadata with document IDs, chunk IDs, excerpts, and page ranges.
+
+Supported summary types:
+
+- `technology_risk`
+- `diligence_summary`
+- `ai_readiness`
+- `security_governance`
+- `board_brief`
+
+Board summary behavior:
+
+- Requires the document to be `chunked`, `embedded`, or `indexed`
+- Uses query-based semantic retrieval when embeddings are available
+- Falls back to the first ordered chunks when embeddings are not available or retrieval fails
+- Labels sources as `[S1]`, `[S2]`, and so on
+- Instructs the LLM provider to use only supplied sources, cite material claims, avoid speculation, and state limitations
+- Defaults to the mock LLM provider, so no OpenAI key is required for local development
+
+Generate a board-level memo:
+
+```bash
+curl -X POST http://localhost:8000/advisor/board-summary \
+  -H "Content-Type: application/json" \
+  -d '{
+    "document_id": "00000000-0000-0000-0000-000000000000",
+    "summary_type": "technology_risk",
+    "top_k": 12
+  }'
+```
+
+Current limitations:
+
+- No legal, financial, investment, or regulatory advice
+- No multi-document synthesis yet
+- No background jobs or streaming yet
+- Mock provider output is deterministic and intended for local development only
+
 ## Configuration
 
 Runtime configuration is loaded from environment variables and `.env` using `pydantic-settings`.
