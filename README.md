@@ -233,14 +233,17 @@ Chunk embeddings can be generated and stored in PostgreSQL using pgvector.
 
 Embedding behavior:
 
-- Requires `OPENAI_API_KEY` in the environment
-- Uses `text-embedding-3-small` by default
+- Requires `OPENAI_API_KEY` only when `EMBEDDING_PROVIDER=openai`
+- Uses local embeddings by default with `BAAI/bge-small-en-v1.5`
+- Supports OpenAI-managed embeddings with `EMBEDDING_PROVIDER=openai`
 - Loads chunk content in `chunk_index` order
 - Skips chunks that already have embeddings
 - Limits each synchronous embedding request to 200 chunks by default
 - Limits each embedding input to 12,000 characters by default
 - Stores vectors on `document_chunks.embedding`
 - Updates document status to `embedded`
+
+The architecture abstracts embedding providers. We can use OpenAI-managed embeddings, or local embeddings for confidentiality, cost control, and air-gapped environments.
 
 Trigger embedding for a chunked document:
 
@@ -296,7 +299,10 @@ Key variables:
 - `POSTGRES_HOST`
 - `POSTGRES_PORT`
 - `OPENAI_API_KEY`
+- `EMBEDDING_PROVIDER`
 - `EMBEDDING_MODEL`
+- `LOCAL_EMBEDDING_MODEL`
+- `EMBEDDING_DIMENSIONS`
 - `MAX_EMBEDDING_CHUNKS_PER_REQUEST`
 - `MAX_EMBEDDING_TEXT_CHARS`
 - `MAX_SEARCH_QUERY_CHARS`
