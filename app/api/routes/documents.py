@@ -10,9 +10,17 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.dependencies import get_db
 from app.ingestion.parser import PDFParsingError
-from app.ingestion.pipeline import DocumentNotFoundError, InvalidDocumentStatusError, parse_uploaded_document
-from app.models.document import Document, ParsedDocumentPage
+from app.ingestion.pipeline import (
+    DocumentNotFoundError,
+    InvalidDocumentStatusError,
+    chunk_parsed_document,
+    parse_uploaded_document,
+)
+from app.models.document import Document, DocumentChunk, ParsedDocumentPage
 from app.schemas.document import (
+    DocumentChunkPreview,
+    DocumentChunkResponse,
+    DocumentChunksResponse,
     DocumentClassification,
     DocumentPagePreview,
     DocumentPagesResponse,
@@ -103,6 +111,25 @@ def parse_document(document_id: UUID, db: Session = Depends(get_db)) -> Document
     )
 
 
+@router.post("/{document_id}/chunk", response_model=DocumentChunkResponse)
+def chunk_document(document_id: UUID, db: Session = Depends(get_db)) -> DocumentChunkResponse:
+    try:
+        document = chunk_parsed_document(document_id, db)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidDocumentStatusError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    chunks_created = (document.document_metadata or {}).get("chunks_created", 0)
+    return DocumentChunkResponse(
+        document_id=document.id,
+        status=document.status,
+        chunks_created=chunks_created,
+    )
+
+
 @router.get("/{document_id}/pages", response_model=DocumentPagesResponse)
 def get_document_pages(document_id: UUID, db: Session = Depends(get_db)) -> DocumentPagesResponse:
     document = db.get(Document, document_id)
@@ -123,6 +150,36 @@ def get_document_pages(document_id: UUID, db: Session = Depends(get_db)) -> Docu
         pages=[
             DocumentPagePreview(page_number=page.page_number, text_preview=page.text[:1000])
             for page in pages
+        ],
+    )
+
+
+@router.get("/{document_id}/chunks", response_model=DocumentChunksResponse)
+def get_document_chunks(document_id: UUID, db: Session = Depends(get_db)) -> DocumentChunksResponse:
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    chunks = db.scalars(
+        select(DocumentChunk)
+        .where(DocumentChunk.document_id == document.id)
+        .order_by(DocumentChunk.chunk_index)
+    ).all()
+
+    return DocumentChunksResponse(
+        document_id=document.id,
+        chunks=[
+            DocumentChunkPreview(
+                chunk_index=chunk.chunk_index,
+                page_start=chunk.page_start,
+                page_end=chunk.page_end,
+                token_count=chunk.token_count,
+                content_preview=chunk.content[:1000],
+            )
+            for chunk in chunks
         ],
     )
 

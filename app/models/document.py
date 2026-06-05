@@ -102,7 +102,10 @@ class DocumentChunk(Base):
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    token_count: Mapped[int | None] = mapped_column(Integer)
+    page_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
