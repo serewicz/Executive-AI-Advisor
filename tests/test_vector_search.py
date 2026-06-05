@@ -136,3 +136,10 @@ def test_invalid_empty_query_returns_422():
     response = client.post("/search", json={"query": "", "top_k": 5})
 
     assert response.status_code == 422
+
+
+def test_oversized_query_returns_422():
+    client = TestClient(app)
+    response = client.post("/search", json={"query": "x" * 2001, "top_k": 5})
+
+    assert response.status_code == 422

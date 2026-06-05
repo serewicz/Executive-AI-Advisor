@@ -237,6 +237,8 @@ Embedding behavior:
 - Uses `text-embedding-3-small` by default
 - Loads chunk content in `chunk_index` order
 - Skips chunks that already have embeddings
+- Limits each synchronous embedding request to 200 chunks by default
+- Limits each embedding input to 12,000 characters by default
 - Stores vectors on `document_chunks.embedding`
 - Updates document status to `embedded`
 
@@ -271,6 +273,13 @@ curl -X POST http://localhost:8000/search \
 
 Search returns cited chunk previews with page references and document governance metadata. It does not generate LLM answers yet.
 
+Cost and abuse controls:
+
+- `MAX_EMBEDDING_CHUNKS_PER_REQUEST` caps synchronous embedding fan-out
+- `MAX_EMBEDDING_TEXT_CHARS` caps each embedding input
+- `MAX_SEARCH_QUERY_CHARS` caps semantic search query size
+- `top_k` is capped at 20
+
 ## Configuration
 
 Runtime configuration is loaded from environment variables and `.env` using `pydantic-settings`.
@@ -288,6 +297,9 @@ Key variables:
 - `POSTGRES_PORT`
 - `OPENAI_API_KEY`
 - `EMBEDDING_MODEL`
+- `MAX_EMBEDDING_CHUNKS_PER_REQUEST`
+- `MAX_EMBEDDING_TEXT_CHARS`
+- `MAX_SEARCH_QUERY_CHARS`
 
 ## Database
 

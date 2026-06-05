@@ -16,6 +16,10 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         raise EmbeddingError("At least one non-empty text is required for embedding.")
     if any(not text for text in normalized_texts):
         raise EmbeddingError("Embedding input cannot contain empty text.")
+    if any(len(text) > settings.max_embedding_text_chars for text in normalized_texts):
+        raise EmbeddingError(
+            f"Embedding input exceeds the {settings.max_embedding_text_chars} character limit."
+        )
     if not settings.openai_api_key:
         raise EmbeddingError("OPENAI_API_KEY is required to generate embeddings.")
 

@@ -2,7 +2,9 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.db.dependencies import get_db
+from app.ingestion.embedder import EmbeddingError, embed_texts
 from app.ingestion.pipeline import InvalidDocumentStatusError, embed_document_chunks
 from app.main import app
 from app.models.document import Document, DocumentChunk
@@ -134,3 +136,41 @@ def test_unchunked_document_cannot_be_embedded():
         assert "cannot be embedded" in str(exc)
     else:
         raise AssertionError("Expected InvalidDocumentStatusError")
+
+
+def test_embed_endpoint_rejects_documents_over_chunk_limit(monkeypatch):
+    document = make_document()
+    session = FakeSession(
+        document=document,
+        chunks=[
+            make_chunk(document.id, chunk_index=0, content="first"),
+            make_chunk(document.id, chunk_index=1, content="second"),
+        ],
+    )
+    monkeypatch.setattr(settings, "max_embedding_chunks_per_request", 1)
+
+    def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+
+    try:
+        client = TestClient(app)
+        response = client.post(f"/documents/{document.id}/embed")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert "per-request limit" in response.json()["detail"]
+    assert document.status == "failed"
+
+
+def test_embed_texts_rejects_oversized_input(monkeypatch):
+    monkeypatch.setattr(settings, "max_embedding_text_chars", 10)
+
+    try:
+        embed_texts(["x" * 11])
+    except EmbeddingError as exc:
+        assert "character limit" in str(exc)
+    else:
+        raise AssertionError("Expected EmbeddingError")

@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.ingestion.chunker import chunk_document_pages
 from app.ingestion.embedder import EmbeddingError, embed_texts
 from app.ingestion.parser import PDFParsingError, parse_pdf
@@ -137,6 +138,12 @@ def embed_document_chunks(document_id: UUID, db: Session) -> Document:
             .order_by(DocumentChunk.chunk_index)
         ).all()
         chunks_without_embeddings = [chunk for chunk in chunks if chunk.embedding is None]
+        if len(chunks_without_embeddings) > settings.max_embedding_chunks_per_request:
+            raise EmbeddingError(
+                "Document has "
+                f"{len(chunks_without_embeddings)} chunks without embeddings, "
+                f"exceeding the per-request limit of {settings.max_embedding_chunks_per_request}."
+            )
 
         if chunks_without_embeddings:
             embeddings = embed_texts([chunk.content for chunk in chunks_without_embeddings])
