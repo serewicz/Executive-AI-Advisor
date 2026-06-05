@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = Field(default=25, alias="MAX_UPLOAD_MB")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     embedding_provider: str = Field(default="local", alias="EMBEDDING_PROVIDER")
-    embedding_model: str = Field(default="text-embedding-3-small", alias="EMBEDDING_MODEL")
+    openai_embedding_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBEDDING_MODEL")
     local_embedding_model: str = Field(default="BAAI/bge-small-en-v1.5", alias="LOCAL_EMBEDDING_MODEL")
     embedding_dimensions: int = Field(default=1536, alias="EMBEDDING_DIMENSIONS")
     max_embedding_chunks_per_request: int = Field(default=200, alias="MAX_EMBEDDING_CHUNKS_PER_REQUEST")

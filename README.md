@@ -236,6 +236,7 @@ Embedding behavior:
 - Requires `OPENAI_API_KEY` only when `EMBEDDING_PROVIDER=openai`
 - Uses local embeddings by default with `BAAI/bge-small-en-v1.5`
 - Supports OpenAI-managed embeddings with `EMBEDDING_PROVIDER=openai`
+- Uses `OPENAI_EMBEDDING_MODEL=text-embedding-3-small` when OpenAI embeddings are enabled
 - Loads chunk content in `chunk_index` order
 - Skips chunks that already have embeddings
 - Limits each synchronous embedding request to 200 chunks by default
@@ -276,6 +277,21 @@ curl -X POST http://localhost:8000/search \
 
 Search returns cited chunk previews with page references and document governance metadata. It does not generate LLM answers yet.
 
+Retrieval and generation are intentionally separate. Embeddings and vector search identify relevant source chunks; LLM answer synthesis will be added later as a separate layer so retrieval quality, citations, provider choice, and governance controls can be evaluated independently.
+
+Switch embedding providers with environment variables:
+
+```bash
+EMBEDDING_PROVIDER=local
+LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+```
+
+```bash
+EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=...
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
 Cost and abuse controls:
 
 - `MAX_EMBEDDING_CHUNKS_PER_REQUEST` caps synchronous embedding fan-out
@@ -300,8 +316,8 @@ Key variables:
 - `POSTGRES_PORT`
 - `OPENAI_API_KEY`
 - `EMBEDDING_PROVIDER`
-- `EMBEDDING_MODEL`
 - `LOCAL_EMBEDDING_MODEL`
+- `OPENAI_EMBEDDING_MODEL`
 - `EMBEDDING_DIMENSIONS`
 - `MAX_EMBEDDING_CHUNKS_PER_REQUEST`
 - `MAX_EMBEDDING_TEXT_CHARS`
