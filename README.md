@@ -335,6 +335,14 @@ Install dependencies locally, then run:
 pytest
 ```
 
+## Embedding Strategy
+
+Executive AI Advisor separates retrieval from generation.
+
+Retrieval uses embeddings to find relevant document passages. The default embedding provider is local to reduce cost, limit external data exposure, and support confidential diligence workflows.
+
+Generation will be added later using frontier LLMs for board-level synthesis, recommendations, and executive summaries.
+
 ## Supply Chain Provenance
 
 Release and manual builds generate SLSA provenance for the Dockerized Executive AI Advisor service.
