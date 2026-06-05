@@ -41,3 +41,22 @@ class DocumentPagePreview(BaseModel):
 class DocumentPagesResponse(BaseModel):
     document_id: UUID
     pages: list[DocumentPagePreview]
+
+
+class DocumentChunkResponse(BaseModel):
+    document_id: UUID
+    status: DocumentStatus
+    chunks_created: int
+
+
+class DocumentChunkPreview(BaseModel):
+    chunk_index: int
+    page_start: int
+    page_end: int
+    token_count: int
+    content_preview: str
+
+
+class DocumentChunksResponse(BaseModel):
+    document_id: UUID
+    chunks: list[DocumentChunkPreview]

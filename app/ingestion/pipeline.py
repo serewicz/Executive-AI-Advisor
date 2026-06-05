@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.ingestion.chunker import chunk_document_pages
 from app.ingestion.parser import PDFParsingError, parse_pdf
-from app.models.document import Document, ParsedDocumentPage
+from app.models.document import Document, DocumentChunk, ParsedDocumentPage
 
 
 class DocumentNotFoundError(LookupError):
@@ -62,3 +63,57 @@ def parse_uploaded_document(document_id: UUID, db: Session) -> Document:
         }
         db.commit()
         raise PDFParsingError(f"Failed to parse document {document_id}: {exc}") from exc
+
+
+def chunk_parsed_document(document_id: UUID, db: Session) -> Document:
+    document = db.get(Document, document_id)
+    if document is None:
+        raise DocumentNotFoundError(f"Document not found: {document_id}")
+
+    if document.status not in {"parsed", "chunked"}:
+        raise InvalidDocumentStatusError(
+            f"Document {document_id} cannot be chunked from status {document.status}."
+        )
+
+    try:
+        pages = db.scalars(
+            select(ParsedDocumentPage)
+            .where(ParsedDocumentPage.document_id == document.id)
+            .order_by(ParsedDocumentPage.page_number)
+        ).all()
+        chunks = chunk_document_pages(pages)
+        if not chunks:
+            raise ValueError("No chunks were generated from parsed document pages.")
+
+        db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
+        db.add_all(
+            [
+                DocumentChunk(
+                    document_id=document.id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    page_start=chunk.page_start,
+                    page_end=chunk.page_end,
+                    token_count=chunk.token_count,
+                    chunk_metadata=chunk.metadata,
+                )
+                for chunk in chunks
+            ]
+        )
+        document.status = "chunked"
+        document.document_metadata = {
+            **(document.document_metadata or {}),
+            "chunks_created": len(chunks),
+        }
+        db.commit()
+        db.refresh(document)
+        return document
+    except Exception as exc:
+        db.rollback()
+        document.status = "failed"
+        document.document_metadata = {
+            **(document.document_metadata or {}),
+            "chunk_error": str(exc),
+        }
+        db.commit()
+        raise RuntimeError(f"Failed to chunk document {document_id}: {exc}") from exc

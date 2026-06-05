@@ -179,10 +179,55 @@ Each page preview is limited to 1,000 characters.
 Current limitations:
 
 - Parsing is synchronous
-- No chunking yet
 - No embeddings yet
 - No LLM calls yet
 - No OCR tuning yet
+
+## Document Chunking
+
+Parsed document pages can be converted into retrieval-ready chunks.
+
+Chunking behavior:
+
+- Loads parsed pages in page order
+- Combines page text into readable chunks
+- Preserves `page_start` and `page_end`
+- Uses a target chunk size of 1,000 estimated tokens
+- Uses an overlap of 150 estimated tokens
+- Estimates tokens with simple word count divided by `0.75`
+- Replaces existing chunks when a document is re-chunked
+- Updates document status to `chunked`
+
+Trigger chunking for a parsed document:
+
+```bash
+curl -X POST http://localhost:8000/documents/{document_id}/chunk
+```
+
+Expected response:
+
+```json
+{
+  "document_id": "...",
+  "status": "chunked",
+  "chunks_created": 8
+}
+```
+
+Fetch chunk previews:
+
+```bash
+curl http://localhost:8000/documents/{document_id}/chunks
+```
+
+Each chunk preview is limited to 1,000 characters.
+
+Current limitations:
+
+- Simple token estimation only
+- No embeddings yet
+- No vector search yet
+- No LLM calls yet
 
 ## Configuration
 

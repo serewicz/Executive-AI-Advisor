@@ -1,4 +1,7 @@
 from app.schemas.document import (
+    DocumentChunkPreview,
+    DocumentChunkResponse,
+    DocumentChunksResponse,
     DocumentPagePreview,
     DocumentPagesResponse,
     DocumentParseResponse,
@@ -7,6 +10,9 @@ from app.schemas.document import (
 )
 
 __all__ = [
+    "DocumentChunkPreview",
+    "DocumentChunkResponse",
+    "DocumentChunksResponse",
     "DocumentPagePreview",
     "DocumentPagesResponse",
     "DocumentParseResponse",
