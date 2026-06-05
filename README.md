@@ -236,6 +236,7 @@ Embedding behavior:
 - Requires `OPENAI_API_KEY` only when `EMBEDDING_PROVIDER=openai`
 - Uses local embeddings by default with `BAAI/bge-small-en-v1.5`
 - Supports OpenAI-managed embeddings with `EMBEDDING_PROVIDER=openai`
+- Uses `OPENAI_EMBEDDING_MODEL=text-embedding-3-small` when OpenAI embeddings are enabled
 - Loads chunk content in `chunk_index` order
 - Skips chunks that already have embeddings
 - Limits each synchronous embedding request to 200 chunks by default
@@ -276,12 +277,95 @@ curl -X POST http://localhost:8000/search \
 
 Search returns cited chunk previews with page references and document governance metadata. It does not generate LLM answers yet.
 
+Retrieval and generation are intentionally separate. Embeddings and vector search identify relevant source chunks; LLM answer synthesis will be added later as a separate layer so retrieval quality, citations, provider choice, and governance controls can be evaluated independently.
+
+Switch embedding providers with environment variables:
+
+```bash
+EMBEDDING_PROVIDER=local
+LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+```
+
+```bash
+EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=...
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
 Cost and abuse controls:
 
 - `MAX_EMBEDDING_CHUNKS_PER_REQUEST` caps synchronous embedding fan-out
 - `MAX_EMBEDDING_TEXT_CHARS` caps each embedding input
 - `MAX_SEARCH_QUERY_CHARS` caps semantic search query size
 - `top_k` is capped at 20
+
+## Cited Executive Q&A
+
+Executive Q&A uses semantic search first, then asks the configured LLM provider to answer using only the retrieved chunks.
+
+Q&A behavior:
+
+- Retrieves relevant chunks with pgvector semantic search
+- Formats retrieved chunks as numbered sources like `[S1]`, `[S2]`, and `[S3]`
+- Requires answers to cite material claims using source labels
+- Returns citation metadata with document IDs, chunk IDs, excerpts, and page ranges
+- Defaults to `LLM_PROVIDER=mock` so local development and tests do not require an OpenAI key
+- Can use OpenAI later with `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, and `OPENAI_CHAT_MODEL`
+
+Ask an executive question:
+
+```bash
+curl -X POST http://localhost:8000/advisor/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What are the main technology risks?",
+    "top_k": 5,
+    "source_type": null,
+    "classification": null
+  }'
+```
+
+The mock provider returns deterministic cited answers for local development. Real answer generation can be enabled later without changing the retrieval pipeline.
+
+## Board-Level Summary Generator
+
+The board summary endpoint creates a structured memo from an existing document's chunks. It is grounded in retrieved source chunks and returns separate citation metadata with document IDs, chunk IDs, excerpts, and page ranges.
+
+Supported summary types:
+
+- `technology_risk`
+- `diligence_summary`
+- `ai_readiness`
+- `security_governance`
+- `board_brief`
+
+Board summary behavior:
+
+- Requires the document to be `chunked`, `embedded`, or `indexed`
+- Uses query-based semantic retrieval when embeddings are available
+- Falls back to the first ordered chunks when embeddings are not available or retrieval fails
+- Labels sources as `[S1]`, `[S2]`, and so on
+- Instructs the LLM provider to use only supplied sources, cite material claims, avoid speculation, and state limitations
+- Defaults to the mock LLM provider, so no OpenAI key is required for local development
+
+Generate a board-level memo:
+
+```bash
+curl -X POST http://localhost:8000/advisor/board-summary \
+  -H "Content-Type: application/json" \
+  -d '{
+    "document_id": "00000000-0000-0000-0000-000000000000",
+    "summary_type": "technology_risk",
+    "top_k": 12
+  }'
+```
+
+Current limitations:
+
+- No legal, financial, investment, or regulatory advice
+- No multi-document synthesis yet
+- No background jobs or streaming yet
+- Mock provider output is deterministic and intended for local development only
 
 ## Configuration
 
@@ -299,9 +383,11 @@ Key variables:
 - `POSTGRES_HOST`
 - `POSTGRES_PORT`
 - `OPENAI_API_KEY`
+- `LLM_PROVIDER`
+- `OPENAI_CHAT_MODEL`
 - `EMBEDDING_PROVIDER`
-- `EMBEDDING_MODEL`
 - `LOCAL_EMBEDDING_MODEL`
+- `OPENAI_EMBEDDING_MODEL`
 - `EMBEDDING_DIMENSIONS`
 - `MAX_EMBEDDING_CHUNKS_PER_REQUEST`
 - `MAX_EMBEDDING_TEXT_CHARS`

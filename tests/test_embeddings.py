@@ -4,13 +4,10 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.db.dependencies import get_db
-from app.ingestion.embedder import (
-    EmbeddingError,
-    OpenAIEmbeddingProvider,
-    SentenceTransformerEmbeddingProvider,
-    embed_texts,
-    get_embedding_provider,
-)
+from app.ingestion.embedder import EmbeddingError, embed_texts
+from app.ingestion.embeddings.factory import get_embedding_provider
+from app.ingestion.embeddings.local import LocalEmbeddingProvider
+from app.ingestion.embeddings.openai_provider import OpenAIEmbeddingProvider
 from app.ingestion.pipeline import InvalidDocumentStatusError, embed_document_chunks
 from app.main import app
 from app.models.document import Document, DocumentChunk
@@ -184,14 +181,16 @@ def test_embed_texts_rejects_oversized_input(monkeypatch):
 
 def test_default_embedding_provider_is_local(monkeypatch):
     monkeypatch.setattr(settings, "embedding_provider", "local")
+    get_embedding_provider.cache_clear()
 
     provider = get_embedding_provider()
 
-    assert isinstance(provider, SentenceTransformerEmbeddingProvider)
+    assert isinstance(provider, LocalEmbeddingProvider)
 
 
 def test_embedding_provider_can_use_openai(monkeypatch):
     monkeypatch.setattr(settings, "embedding_provider", "openai")
+    get_embedding_provider.cache_clear()
 
     provider = get_embedding_provider()
 
@@ -199,13 +198,24 @@ def test_embedding_provider_can_use_openai(monkeypatch):
 
 
 def test_embed_texts_uses_configured_provider(monkeypatch):
-    monkeypatch.setattr(settings, "embedding_provider", "local")
-    monkeypatch.setattr(
-        SentenceTransformerEmbeddingProvider,
-        "embed_texts",
-        lambda self, texts: [[0.3] * settings.embedding_dimensions for _ in texts],
-    )
+    class FakeProvider:
+        def embed_texts(self, texts):
+            return [[0.3] * settings.embedding_dimensions for _ in texts]
+
+        def embedding_dimension(self):
+            return settings.embedding_dimensions
+
+    monkeypatch.setattr("app.ingestion.embedder.get_embedding_provider", lambda: FakeProvider())
 
     embeddings = embed_texts(["  local   embedding  "])
 
     assert embeddings == [[0.3] * settings.embedding_dimensions]
+
+
+def test_embedding_provider_exposes_dimension(monkeypatch):
+    monkeypatch.setattr(settings, "embedding_provider", "local")
+    get_embedding_provider.cache_clear()
+
+    provider = get_embedding_provider()
+
+    assert provider.embedding_dimension() == settings.embedding_dimensions

@@ -28,6 +28,7 @@ def search_similar_chunks(
     top_k: int = 5,
     source_type: str | None = None,
     classification: str | None = None,
+    document_id: UUID | None = None,
 ) -> list[SearchResult]:
     normalized_query = " ".join(query.split())
     if not normalized_query:
@@ -48,6 +49,8 @@ def search_similar_chunks(
         statement = statement.where(Document.source_type == source_type)
     if classification is not None:
         statement = statement.where(Document.classification == classification)
+    if document_id is not None:
+        statement = statement.where(Document.id == document_id)
 
     rows = db.execute(statement).all()
     return [
