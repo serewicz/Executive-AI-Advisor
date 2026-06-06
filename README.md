@@ -73,6 +73,13 @@ Open:
 - [Governance](docs/Governance.md)
 - [Security](docs/Security.md)
 
+## Demo Datasets
+
+Synthetic diligence datasets are available for local demos and testing:
+
+- [FinTechCo](data/demo/fintechco/): regulated fintech / compliance-heavy diligence.
+- [AcquisitionTargetCo](data/demo/acquisition-target-co/): founder-led acquisition diligence and M&A integration readiness.
+
 ## Architecture Overview
 
 Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:

@@ -44,6 +44,29 @@ Suggested documents:
 
 Use a document that can be discussed publicly if the demo is being shown outside a confidential environment.
 
+## Synthetic Demo Datasets
+
+The repository includes synthetic Markdown datasets that can be converted to PDF or copied into demo packets for upload.
+
+| Dataset | Location | Best For |
+| --- | --- | --- |
+| FinTechCo | `data/demo/fintechco/` | Regulated fintech, compliance-heavy diligence, PCI scope, vendor concentration, access governance, and AI governance. |
+| AcquisitionTargetCo | `data/demo/acquisition-target-co/` | Founder-led acquisition diligence, key-person dependency, aging architecture, security basics, and M&A integration readiness. |
+
+Use FinTechCo when the audience wants to see board-level technology diligence for a high-growth regulated software company. Good questions include:
+
+- What compliance risks should the board monitor?
+- What vendor concentration risks exist?
+- What AI governance gaps exist?
+- What should be included in a 100-day technology plan?
+
+Use AcquisitionTargetCo when the audience wants to see acquisition diligence for a profitable but under-instrumented founder-led software company. Good questions include:
+
+- What are the top acquisition technology risks?
+- What key-person risks exist?
+- What integration risks should the acquirer plan for?
+- What security gaps require immediate remediation?
+
 ## Demo Flow
 
 ### 1. Upload Document

@@ -23,6 +23,15 @@ The current workflow is optimized for PDF documents such as:
 - AI readiness reports
 - board materials
 
+## Synthetic Demo Datasets
+
+The repository includes fictional demo datasets for safe local demonstrations:
+
+- `data/demo/fintechco/`: regulated fintech and compliance-heavy diligence scenario.
+- `data/demo/acquisition-target-co/`: founder-led acquisition diligence and M&A integration-readiness scenario.
+
+Each dataset includes multiple Markdown source documents plus a dataset README with suggested questions and expected risks. The documents are synthetic and not based on any real company. They are intended to help users test technology diligence reports, board technology briefs, AI governance assessments, risk scoring, 100-day technology plans, management interview questions, and M&A integration readiness.
+
 Metadata captured during upload includes:
 
 - `source_type`: `sec_filing`, `diligence_report`, `technology_assessment`, or `board_material`
