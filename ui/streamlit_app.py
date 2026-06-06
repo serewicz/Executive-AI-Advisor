@@ -312,7 +312,11 @@ def _render_evaluation_section() -> None:
             st.markdown("#### Answer")
             st.markdown(result.get("answer", ""))
             _render_list("Notes", result.get("notes", []))
-            _render_citations(result.get("citations", []), title="Evaluation Citations")
+            _render_citations(
+                result.get("citations", []),
+                title="Evaluation Citations",
+                use_expanders=False,
+            )
 
     report = _build_evaluation_markdown(response)
     st.download_button(
@@ -481,7 +485,7 @@ def _render_list(title: str, values: list[str]) -> None:
         st.markdown(f"- {value}")
 
 
-def _render_citations(citations: list[dict[str, Any]], title: str) -> None:
+def _render_citations(citations: list[dict[str, Any]], title: str, use_expanders: bool = True) -> None:
     st.markdown(f"#### {title}")
     if not citations:
         st.markdown("No citations returned.")
@@ -494,10 +498,19 @@ def _render_citations(citations: list[dict[str, Any]], title: str) -> None:
         page_end = citation.get("page_end", "?")
         heading = f"{label} - {document_title} - pages {page_start}-{page_end}"
 
-        with st.expander(heading):
-            st.write(citation.get("excerpt", ""))
-            st.caption(f"Document ID: {citation.get('document_id')}")
-            st.caption(f"Chunk ID: {citation.get('chunk_id')}")
+        if use_expanders:
+            with st.expander(heading):
+                st.write(citation.get("excerpt", ""))
+                st.caption(f"Document ID: {citation.get('document_id')}")
+                st.caption(f"Chunk ID: {citation.get('chunk_id')}")
+        else:
+            with st.container():
+                st.markdown(f"**{heading}**")
+                st.markdown(citation.get("excerpt", ""))
+                st.caption(f"Document ID: {citation.get('document_id')}")
+                st.caption(f"Chunk ID: {citation.get('chunk_id')}")
+                if index < len(citations):
+                    st.divider()
 
 
 def _build_markdown_memo(response: dict[str, Any]) -> str:
