@@ -1,0 +1,154 @@
+# Architecture
+
+Executive AI Advisor is a FastAPI, PostgreSQL, pgvector, and Streamlit application for turning executive documents into cited answers, board-level summaries, and evaluation records.
+
+## System Overview
+
+The system separates ingestion, retrieval, generation, and evaluation so each layer can be tested and governed independently. Documents are uploaded through the API or Streamlit UI, parsed into page-aware text, chunked for retrieval, embedded into pgvector, searched semantically, and then used by advisor services that require citations, confidence, and limitations.
+
+```mermaid
+flowchart LR
+    User["Executive or analyst"] --> UI["Streamlit UI"]
+    UI --> API["FastAPI backend"]
+    API --> Upload["Document upload"]
+    Upload --> DB[("PostgreSQL + pgvector")]
+    Upload --> Files["data/uploads"]
+    API --> Parser["PDF parser"]
+    Parser --> Pages["Parsed pages"]
+    Pages --> DB
+    API --> Chunker["Chunker"]
+    Chunker --> Chunks["Document chunks"]
+    Chunks --> DB
+    API --> Embedder["Embedding provider"]
+    Embedder --> Vectors["Chunk embeddings"]
+    Vectors --> DB
+    API --> Search["pgvector semantic search"]
+    Search --> Advisor["Advisor service"]
+    Advisor --> LLM["Mock or OpenAI LLM provider"]
+    Advisor --> Answers["Cited Q&A and board memos"]
+    Answers --> Evaluation["Evaluation service"]
+    Evaluation --> DB
+```
+
+## Data Flow
+
+1. Upload: a PDF is uploaded with `source_type` and `classification`.
+2. Metadata persistence: the API creates a `Document` row with filename, file path, status, source type, classification, and metadata.
+3. Parsing: the parser extracts page-aware text and stores `ParsedDocumentPage` records.
+4. Page storage: each non-empty page is stored with `page_number`, text, metadata, and timestamp.
+5. Chunking: parsed pages are combined into retrieval-ready chunks with page ranges and estimated token counts.
+6. Embeddings: chunks are embedded using the configured provider and stored on `DocumentChunk.embedding`.
+7. pgvector search: query embeddings are compared against chunk embeddings using cosine distance.
+8. Cited Q&A: retrieved chunks are labeled as sources and passed to the advisor service.
+9. Board memo generation: board summary prompts create structured memo sections using retrieved chunks only.
+10. Evaluation: advisor answers are scored for citation quality, groundedness, relevance, and executive usefulness.
+
+## Core Components
+
+- FastAPI: backend API, routes, request validation, and service orchestration.
+- Streamlit: board-facing demo UI that hides raw JSON.
+- PostgreSQL: transactional metadata store.
+- pgvector: vector storage and semantic search.
+- Document parser: PDF parsing with Docling as the preferred parser and `pypdf` fallback.
+- Chunker: converts page text into retrieval-ready chunks.
+- Embedding providers: local embeddings by default, OpenAI embeddings optionally.
+- LLM providers: mock provider by default, OpenAI chat provider optionally.
+- Advisor service: cited Q&A and board memo generation.
+- Evaluation service: deterministic scoring and persistent evaluation runs.
+
+## Provider Strategy
+
+Embeddings and LLM generation are abstracted behind provider interfaces.
+
+Embedding provider defaults:
+
+- `EMBEDDING_PROVIDER=local`
+- `LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5`
+
+Optional OpenAI embedding mode:
+
+- `EMBEDDING_PROVIDER=openai`
+- `OPENAI_API_KEY=...`
+- `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
+
+LLM provider defaults:
+
+- `LLM_PROVIDER=mock`
+
+Optional OpenAI chat mode:
+
+- `LLM_PROVIDER=openai`
+- `OPENAI_API_KEY=...`
+- `OPENAI_CHAT_MODEL=gpt-4o-mini`
+
+The default local/mock configuration supports demos, tests, confidentiality, cost control, and environments where external API calls are not allowed.
+
+## Database Overview
+
+Core tables:
+
+- `documents`: document metadata, lifecycle status, governance classification, source type, file path, and metadata.
+- `parsed_document_pages`: page-aware parsed text.
+- `document_chunks`: retrieval chunks, page ranges, token counts, metadata, and embeddings.
+- `evaluation_runs`: evaluation questions, scored results, average score, and timestamp.
+
+Docker Compose uses `pgvector/pgvector:pg16`. The database init script enables the `vector` extension, and Alembic applies schema migrations at container startup.
+
+## Status Lifecycle
+
+Documents move through these statuses:
+
+- `uploaded`
+- `parsing`
+- `parsed`
+- `chunked`
+- `embedded`
+- `indexed`
+- `failed`
+
+Failed processing steps record error metadata on the document where appropriate.
+
+## Citation Model
+
+Retrieved chunks are assigned labels such as `[S1]`, `[S2]`, and `[S3]`. Advisor outputs are expected to cite material claims with those labels. Responses also return structured citation metadata:
+
+- document ID
+- document title
+- chunk ID
+- page start
+- page end
+- excerpt
+
+This makes generated output inspectable without requiring a user to read raw JSON or trust an uncited answer.
+
+## Security And Governance Hooks
+
+Implemented hooks:
+
+- `classification` metadata: `public`, `internal`, `confidential`, `restricted`
+- `source_type` metadata: `sec_filing`, `diligence_report`, `technology_assessment`, `board_material`
+- local embeddings by default
+- mock LLM by default
+- citations, confidence, and limitations in advisor outputs
+- deterministic evaluation records
+- SLSA provenance and GitHub artifact attestation documentation
+
+Planned hooks:
+
+- multi-user authentication
+- role-based access control
+- audit logs
+- tenant isolation
+- policy checks by classification
+
+## Future Architecture
+
+Planned extensions:
+
+- multi-document synthesis
+- background jobs for parsing, embedding, and evaluation
+- audit logs and immutable review records
+- SEC API ingestion
+- richer export formats such as DOCX and PDF
+- hosted deployment profiles
+- evaluation baselines and release gates
