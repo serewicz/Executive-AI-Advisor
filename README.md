@@ -118,17 +118,37 @@ The FastAPI docs are available at:
 http://localhost:8000/docs
 ```
 
-Run the Streamlit executive demo UI in a separate terminal:
+Run the Streamlit executive demo UI from a second terminal. Streamlit runs on your host machine, so install the Python dependencies locally first:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Then start the UI:
 
 ```bash
 streamlit run ui/streamlit_app.py
 ```
 
-The UI uses `API_BASE_URL` to reach the backend and defaults to:
+The UI uses `API_BASE_URL` to reach the FastAPI backend and defaults to:
 
 ```bash
 API_BASE_URL=http://localhost:8000
 ```
+
+If the API is running somewhere else, set the backend URL when launching Streamlit:
+
+```bash
+API_BASE_URL=http://localhost:8000 streamlit run ui/streamlit_app.py
+```
+
+Recommended local demo flow:
+
+1. Start the API with `docker compose up --build`
+2. Wait for `http://localhost:8000/health` to return `{"status":"ok","database":"ok"}`
+3. Start the UI with `streamlit run ui/streamlit_app.py`
+4. Upload a PDF, then run parse, chunk, and embed from the Processing Pipeline section
+5. Use Executive Q&A or Board Summary Generator to render advisor outputs without raw JSON
 
 Upload a PDF document:
 

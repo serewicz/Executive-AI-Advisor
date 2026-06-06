@@ -51,11 +51,11 @@ def main() -> None:
 def _initialize_state() -> None:
     defaults = {
         "document_id": "",
+        "summary_document_id": "",
         "uploaded_filename": "",
         "document_status": "",
         "qa_response": None,
         "board_summary": None,
-        "last_error": "",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -112,6 +112,7 @@ def _render_upload_section() -> None:
             return
 
         st.session_state.document_id = response["document_id"]
+        st.session_state.summary_document_id = response["document_id"]
         st.session_state.uploaded_filename = response.get("filename", uploaded_file.name)
         st.session_state.document_status = response.get("status", "uploaded")
         st.session_state.qa_response = None
