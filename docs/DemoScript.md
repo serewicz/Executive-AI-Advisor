@@ -50,8 +50,16 @@ The repository includes synthetic Markdown datasets that can be converted to PDF
 
 | Dataset | Location | Best For |
 | --- | --- | --- |
+| SampleCo | `data/demo/sampleco/` | Mid-market B2B SaaS growth equity diligence, moderate technical debt, security governance, AI readiness, and key-person risk. |
 | FinTechCo | `data/demo/fintechco/` | Regulated fintech, compliance-heavy diligence, PCI scope, vendor concentration, access governance, and AI governance. |
 | AcquisitionTargetCo | `data/demo/acquisition-target-co/` | Founder-led acquisition diligence, key-person dependency, aging architecture, security basics, and M&A integration readiness. |
+
+Use SampleCo when the audience wants a balanced growth-equity SaaS diligence scenario. Good questions include:
+
+- What are the top technology risks?
+- What governance concerns should the board monitor?
+- What AI readiness gaps exist?
+- What should be included in the first 100-day technology plan?
 
 Use FinTechCo when the audience wants to see board-level technology diligence for a high-growth regulated software company. Good questions include:
 

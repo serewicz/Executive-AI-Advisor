@@ -77,6 +77,7 @@ Open:
 
 Synthetic diligence datasets are available for local demos and testing:
 
+- [SampleCo](data/demo/sampleco/): mid-market B2B SaaS growth equity diligence.
 - [FinTechCo](data/demo/fintechco/): regulated fintech / compliance-heavy diligence.
 - [AcquisitionTargetCo](data/demo/acquisition-target-co/): founder-led acquisition diligence and M&A integration readiness.
 

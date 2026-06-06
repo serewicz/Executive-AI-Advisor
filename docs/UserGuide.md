@@ -27,6 +27,7 @@ The current workflow is optimized for PDF documents such as:
 
 The repository includes fictional demo datasets for safe local demonstrations:
 
+- `data/demo/sampleco/`: mid-market B2B SaaS growth equity diligence scenario.
 - `data/demo/fintechco/`: regulated fintech and compliance-heavy diligence scenario.
 - `data/demo/acquisition-target-co/`: founder-led acquisition diligence and M&A integration-readiness scenario.
 
