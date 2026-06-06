@@ -40,6 +40,10 @@ def answer_executive_question(
     classification: str | None = None,
     document_id: UUID | None = None,
 ) -> AdvisorAskResponse:
+    scope = "document" if document_id is not None else "global"
+    if document_id is not None and db.get(Document, document_id) is None:
+        raise AdvisorDocumentNotFoundError("Document not found.")
+
     results = search_similar_chunks(
         query=question,
         db=db,
@@ -77,6 +81,8 @@ def answer_executive_question(
             citations=[],
             confidence="low",
             limitations=["No relevant source chunks were retrieved."],
+            scope=scope,
+            document_id=document_id,
         )
 
     provider = get_llm_provider()
@@ -94,6 +100,8 @@ def answer_executive_question(
         citations=citations,
         confidence=llm_response.confidence,  # type: ignore[arg-type]
         limitations=limitations,
+        scope=scope,
+        document_id=document_id,
     )
 
 

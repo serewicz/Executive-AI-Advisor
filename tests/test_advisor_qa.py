@@ -8,17 +8,38 @@ from app.advisor.providers.openai_provider import OpenAIChatProvider
 from app.core.config import settings
 from app.db.dependencies import get_db
 from app.main import app
+from app.models.document import Document
 from app.retrieval.vector_search import SearchResult
 
 
 class FakeSession:
-    pass
+    def __init__(self, document=None):
+        self.document = document
+
+    def get(self, model, object_id):
+        if model is Document and self.document is not None and self.document.id == object_id:
+            return self.document
+        return None
 
 
-def make_search_result(content="Cloud governance and security risks are material."):
-    document_id = uuid4()
+def make_document(filename="assessment.pdf"):
+    return Document(
+        id=uuid4(),
+        title="Technology Assessment",
+        filename=filename,
+        file_path=f"data/uploads/{filename}",
+        source=filename,
+        document_type="pdf",
+        status="embedded",
+        source_type="technology_assessment",
+        classification="confidential",
+        document_metadata={},
+    )
+
+
+def make_search_result(content="Cloud governance and security risks are material.", document_id=None):
     return SearchResult(
-        document_id=document_id,
+        document_id=document_id or uuid4(),
         document_title="Technology Assessment",
         chunk_id=uuid4(),
         chunk_index=0,
@@ -33,6 +54,13 @@ def make_search_result(content="Cloud governance and security risks are material
 
 def override_db():
     yield FakeSession()
+
+
+def override_db_with(session):
+    def _override_db():
+        yield session
+
+    return _override_db
 
 
 def test_advisor_endpoint_returns_answer(monkeypatch):
@@ -56,6 +84,8 @@ def test_advisor_endpoint_returns_answer(monkeypatch):
     assert body["question"] == "What are the main technology risks?"
     assert "[S1]" in body["answer"]
     assert body["confidence"] == "medium"
+    assert body["scope"] == "global"
+    assert body["document_id"] is None
 
 
 def test_advisor_response_includes_citations(monkeypatch):
@@ -77,6 +107,95 @@ def test_advisor_response_includes_citations(monkeypatch):
     assert citation["page_start"] == 1
     assert citation["page_end"] == 2
     assert citation["excerpt"]
+
+
+def test_advisor_with_document_id_only_returns_citations_from_that_document(monkeypatch):
+    selected_document = make_document("sampleco.pdf")
+    other_document_id = uuid4()
+
+    def scoped_search(**kwargs):
+        assert kwargs["document_id"] == selected_document.id
+        all_results = [
+            make_search_result("SampleCo technical debt requires attention.", document_id=selected_document.id),
+            make_search_result("Snowflake 10-K risk should not appear.", document_id=other_document_id),
+        ]
+        return [result for result in all_results if result.document_id == kwargs["document_id"]]
+
+    monkeypatch.setattr("app.advisor.service.search_similar_chunks", scoped_search)
+    app.dependency_overrides[get_db] = override_db_with(FakeSession(selected_document))
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/advisor/ask",
+            json={
+                "question": "What are the main technology risks?",
+                "top_k": 5,
+                "document_id": str(selected_document.id),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scope"] == "document"
+    assert body["document_id"] == str(selected_document.id)
+    assert {citation["document_id"] for citation in body["citations"]} == {str(selected_document.id)}
+
+
+def test_advisor_without_document_id_can_search_globally(monkeypatch):
+    selected_document_id = uuid4()
+    other_document_id = uuid4()
+
+    def global_search(**kwargs):
+        assert kwargs["document_id"] is None
+        return [
+            make_search_result("SampleCo technical debt requires attention.", document_id=selected_document_id),
+            make_search_result("Snowflake 10-K risk can appear in global mode.", document_id=other_document_id),
+        ]
+
+    monkeypatch.setattr("app.advisor.service.search_similar_chunks", global_search)
+    app.dependency_overrides[get_db] = override_db
+
+    try:
+        client = TestClient(app)
+        response = client.post("/advisor/ask", json={"question": "What are the main technology risks?"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scope"] == "global"
+    assert body["document_id"] is None
+    assert {citation["document_id"] for citation in body["citations"]} == {
+        str(selected_document_id),
+        str(other_document_id),
+    }
+
+
+def test_advisor_invalid_document_id_returns_404(monkeypatch):
+    called = False
+
+    def search_should_not_run(**kwargs):
+        nonlocal called
+        called = True
+        return []
+
+    monkeypatch.setattr("app.advisor.service.search_similar_chunks", search_should_not_run)
+    app.dependency_overrides[get_db] = override_db_with(FakeSession())
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/advisor/ask",
+            json={"question": "What are the risks?", "document_id": str(uuid4())},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert called is False
 
 
 def test_mock_provider_does_not_call_external_apis(monkeypatch):

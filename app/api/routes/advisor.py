@@ -22,9 +22,12 @@ def ask_advisor(request: AdvisorAskRequest, db: Session = Depends(get_db)) -> Ad
             question=request.question,
             db=db,
             top_k=request.top_k,
+            document_id=request.document_id,
             source_type=request.source_type,
             classification=request.classification,
         )
+    except AdvisorDocumentNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except LLMError as exc:

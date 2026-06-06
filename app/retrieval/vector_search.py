@@ -26,9 +26,9 @@ def search_similar_chunks(
     query: str,
     db: Session,
     top_k: int = 5,
+    document_id: UUID | None = None,
     source_type: str | None = None,
     classification: str | None = None,
-    document_id: UUID | None = None,
 ) -> list[SearchResult]:
     normalized_query = " ".join(query.split())
     if not normalized_query:

@@ -160,23 +160,27 @@ def _render_processing_section() -> None:
 
 def _render_qa_section() -> None:
     st.header("Executive Q&A")
+    document_id = _active_document_id()
     question = st.text_area(
         "Question",
         value="What are the main technology risks?",
         height=110,
     )
     top_k = st.slider("Sources to retrieve", min_value=1, max_value=20, value=5, key="qa_top_k")
+    search_globally = st.checkbox("Search across all documents", value=False)
+    if document_id and not search_globally:
+        st.caption(f"Scoped to document: {document_id}")
 
     if st.button("Ask Advisor", disabled=not question.strip(), use_container_width=True):
         with st.spinner("Retrieving evidence and drafting answer"):
             response = _post_json(
                 "/advisor/ask",
-                {
-                    "question": question.strip(),
-                    "top_k": top_k,
-                    "source_type": None,
-                    "classification": None,
-                },
+                _build_qa_payload(
+                    question=question.strip(),
+                    top_k=top_k,
+                    document_id=document_id,
+                    search_globally=search_globally,
+                ),
             )
         if response:
             st.session_state.qa_response = response
@@ -186,8 +190,30 @@ def _render_qa_section() -> None:
         st.subheader("Answer")
         st.markdown(response.get("answer", ""))
         _render_confidence(response.get("confidence", "low"))
+        scope = response.get("scope", "global")
+        if scope == "document":
+            st.caption(f"Search scope: document {response.get('document_id', '')}")
+        else:
+            st.caption("Search scope: all documents")
         _render_limitations(response.get("limitations", []))
         _render_citations(response.get("citations", []), title="Q&A Citations")
+
+
+def _build_qa_payload(
+    question: str,
+    top_k: int,
+    document_id: str,
+    search_globally: bool,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "question": question,
+        "top_k": top_k,
+        "source_type": None,
+        "classification": None,
+    }
+    if document_id and not search_globally:
+        payload["document_id"] = document_id
+    return payload
 
 
 def _render_board_summary_section() -> None:

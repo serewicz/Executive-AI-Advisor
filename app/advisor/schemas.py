@@ -20,6 +20,7 @@ SummaryType = Literal[
 class AdvisorAskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=settings.max_search_query_chars)
     top_k: int = Field(default=5, ge=1, le=20)
+    document_id: UUID | None = None
     source_type: DocumentSourceType | None = None
     classification: DocumentClassification | None = None
 
@@ -39,6 +40,8 @@ class AdvisorAskResponse(BaseModel):
     citations: list[AdvisorCitation]
     confidence: Confidence
     limitations: list[str]
+    scope: Literal["document", "global"] = "global"
+    document_id: UUID | None = None
 
 
 class Citation(BaseModel):
