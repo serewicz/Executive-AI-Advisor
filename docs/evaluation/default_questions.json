@@ -1,0 +1,22 @@
+[
+  {
+    "question": "What cybersecurity risks are disclosed?",
+    "expected_themes": ["cybersecurity", "security", "risk", "controls"]
+  },
+  {
+    "question": "What operational risks are disclosed?",
+    "expected_themes": ["operational", "risk", "resilience", "process"]
+  },
+  {
+    "question": "What governance concerns exist?",
+    "expected_themes": ["governance", "oversight", "controls", "accountability"]
+  },
+  {
+    "question": "What should the board monitor?",
+    "expected_themes": ["board", "monitor", "metrics", "risk"]
+  },
+  {
+    "question": "What dependencies create business risk?",
+    "expected_themes": ["dependencies", "vendor", "platform", "business risk"]
+  }
+]

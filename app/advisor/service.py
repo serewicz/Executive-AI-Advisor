@@ -38,6 +38,7 @@ def answer_executive_question(
     top_k: int = 5,
     source_type: str | None = None,
     classification: str | None = None,
+    document_id: UUID | None = None,
 ) -> AdvisorAskResponse:
     results = search_similar_chunks(
         query=question,
@@ -45,6 +46,7 @@ def answer_executive_question(
         top_k=top_k,
         source_type=source_type,
         classification=classification,
+        document_id=document_id,
     )
     source_contexts = [
         SourceContext(

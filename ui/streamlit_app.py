@@ -1,4 +1,6 @@
+import json
 import os
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -6,6 +8,7 @@ import streamlit as st
 
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
+DEFAULT_EVALUATION_PATH = Path(__file__).resolve().parents[1] / "docs" / "evaluation" / "default_questions.json"
 SOURCE_TYPES = [
     "technology_assessment",
     "diligence_report",
@@ -43,6 +46,8 @@ def main() -> None:
         _render_board_summary_section()
 
     st.divider()
+    _render_evaluation_section()
+    st.divider()
     _render_evidence_section()
     st.divider()
     _render_export_section()
@@ -56,6 +61,7 @@ def _initialize_state() -> None:
         "document_status": "",
         "qa_response": None,
         "board_summary": None,
+        "evaluation_response": None,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -117,6 +123,7 @@ def _render_upload_section() -> None:
         st.session_state.document_status = response.get("status", "uploaded")
         st.session_state.qa_response = None
         st.session_state.board_summary = None
+        st.session_state.evaluation_response = None
 
     if st.session_state.document_id:
         st.success("Document uploaded")
@@ -232,19 +239,82 @@ def _render_board_memo(response: dict[str, Any]) -> None:
     _render_citations(response.get("citations", []), title="Board Summary Citations")
 
 
+def _render_evaluation_section() -> None:
+    st.header("Evaluation")
+    st.markdown(
+        '<div class="section-note">Run deterministic checks for citation quality, groundedness, relevance, and executive usefulness.</div>',
+        unsafe_allow_html=True,
+    )
+
+    document_id = st.text_input(
+        "Evaluation document ID",
+        value=_active_document_id(),
+        placeholder="Paste or upload a document ID",
+        key="evaluation_document_id",
+    )
+    questions = _load_default_evaluation_questions()
+
+    with st.expander("Default evaluation questions", expanded=False):
+        for question in questions:
+            st.markdown(f"- {question['question']}")
+
+    if st.button("Run Evaluation", disabled=not document_id.strip(), use_container_width=True):
+        with st.spinner("Running deterministic evaluation"):
+            response = _post_json(
+                "/evaluation/run",
+                {
+                    "document_id": document_id.strip(),
+                    "evaluation_type": "advisor_qa",
+                    "questions": questions,
+                },
+            )
+        if response:
+            st.session_state.evaluation_response = response
+
+    response = st.session_state.evaluation_response
+    if not response:
+        return
+
+    st.metric("Average Score", f"{response.get('average_score', 0):.2f}")
+    for result in response.get("results", []):
+        with st.expander(f"{result.get('overall_score', 0):.2f} - {result.get('question', '')}"):
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Citations", f"{result.get('citation_score', 0):.2f}")
+            col2.metric("Groundedness", f"{result.get('groundedness_score', 0):.2f}")
+            col3.metric("Relevance", f"{result.get('relevance_score', 0):.2f}")
+            col4.metric("Executive Usefulness", f"{result.get('executive_usefulness_score', 0):.2f}")
+            st.markdown("#### Answer")
+            st.markdown(result.get("answer", ""))
+            _render_list("Notes", result.get("notes", []))
+            _render_citations(result.get("citations", []), title="Evaluation Citations")
+
+    report = _build_evaluation_markdown(response)
+    st.download_button(
+        label="Download Evaluation Report.md",
+        data=report,
+        file_name="Evaluation Report.md",
+        mime="text/markdown",
+        use_container_width=True,
+    )
+
+
 def _render_evidence_section() -> None:
     st.header("Citations / Evidence")
     board_summary = st.session_state.board_summary
     qa_response = st.session_state.qa_response
+    evaluation_response = st.session_state.evaluation_response
 
-    if not board_summary and not qa_response:
-        st.info("Run Executive Q&A or generate a board summary to view citations.")
+    if not board_summary and not qa_response and not evaluation_response:
+        st.info("Run Executive Q&A, generate a board summary, or run evaluation to view citations.")
         return
 
     if board_summary:
         _render_citations(board_summary.get("citations", []), title="Board Summary Evidence")
     if qa_response:
         _render_citations(qa_response.get("citations", []), title="Q&A Evidence")
+    if evaluation_response:
+        for result in evaluation_response.get("results", []):
+            _render_citations(result.get("citations", []), title=f"Evaluation Evidence: {result.get('question', '')}")
 
 
 def _render_export_section() -> None:
@@ -277,6 +347,23 @@ def _upload_document(uploaded_file, source_type: str, classification: str) -> di
     }
     data = {"source_type": source_type, "classification": classification}
     return _request("POST", "/documents/upload", files=files, data=data, expected_status={201})
+
+
+def _load_default_evaluation_questions() -> list[dict[str, Any]]:
+    try:
+        with DEFAULT_EVALUATION_PATH.open() as file:
+            return json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return [
+            {
+                "question": "What cybersecurity risks are disclosed?",
+                "expected_themes": ["security", "risk", "controls"],
+            },
+            {
+                "question": "What should the board monitor?",
+                "expected_themes": ["board", "monitor", "risk"],
+            },
+        ]
 
 
 def _run_processing_step(step: str) -> None:
@@ -421,6 +508,53 @@ def _build_markdown_memo(response: dict[str, Any]) -> str:
                 "",
             ]
         )
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_evaluation_markdown(response: dict[str, Any]) -> str:
+    lines = [
+        "# Evaluation Report",
+        "",
+        f"Evaluation Run ID: `{response.get('evaluation_run_id', '')}`",
+        f"Document ID: `{response.get('document_id', '')}`",
+        f"Evaluation Type: `{response.get('evaluation_type', '')}`",
+        f"Average Score: **{response.get('average_score', 0):.2f}**",
+        "",
+    ]
+
+    for result in response.get("results", []):
+        lines.extend(
+            [
+                f"## {result.get('question', '')}",
+                "",
+                f"- Citation Score: {result.get('citation_score', 0):.2f}",
+                f"- Groundedness Score: {result.get('groundedness_score', 0):.2f}",
+                f"- Relevance Score: {result.get('relevance_score', 0):.2f}",
+                f"- Executive Usefulness Score: {result.get('executive_usefulness_score', 0):.2f}",
+                f"- Overall Score: {result.get('overall_score', 0):.2f}",
+                "",
+                "### Answer",
+                result.get("answer", ""),
+                "",
+            ]
+        )
+        lines.extend(_markdown_list("Notes", result.get("notes", [])))
+        lines.extend(["### Citations", ""])
+        for index, citation in enumerate(result.get("citations", []), start=1):
+            label = citation.get("source_label") or f"S{index}"
+            lines.extend(
+                [
+                    f"#### {label}",
+                    f"- Document: {citation.get('document_title', 'Untitled document')}",
+                    f"- Pages: {citation.get('page_start', '?')}-{citation.get('page_end', '?')}",
+                    f"- Document ID: `{citation.get('document_id', '')}`",
+                    f"- Chunk ID: `{citation.get('chunk_id', '')}`",
+                    "",
+                    citation.get("excerpt", ""),
+                    "",
+                ]
+            )
 
     return "\n".join(lines).strip() + "\n"
 
