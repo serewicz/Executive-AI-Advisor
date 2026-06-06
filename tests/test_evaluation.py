@@ -50,6 +50,7 @@ def make_document():
 def make_advisor_response(answer=None, citations=None):
     document_id = uuid4()
     citation = AdvisorCitation(
+        source_label="S1",
         document_id=document_id,
         document_title="Technology Assessment",
         chunk_id=uuid4(),

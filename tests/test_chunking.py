@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.db.dependencies import get_db
 from app.ingestion.chunker import chunk_document_pages
+from app.retrieval.evidence import is_low_value_chunk
 from app.ingestion.pipeline import InvalidDocumentStatusError, chunk_parsed_document
 from app.main import app
 from app.models.document import Document, DocumentChunk, ParsedDocumentPage
@@ -212,3 +213,30 @@ def test_get_document_chunks_returns_previews():
     assert body["chunks"][0]["page_end"] == 2
     assert body["chunks"][0]["token_count"] == 100
     assert len(body["chunks"][0]["content_preview"]) == 1000
+
+
+def test_table_of_contents_chunk_is_marked_low_value():
+    document = make_document()
+    chunks = chunk_document_pages(
+        [
+            make_page(
+                document.id,
+                1,
+                "\n".join(
+                    [
+                        "Contents",
+                        "Executive Summary ................ 1",
+                        "Technology Assessment ........... 3",
+                        "Security Assessment ............. 7",
+                        "Cloud Cost Analysis ............ 12",
+                    ]
+                ),
+            )
+        ],
+        target_tokens=100,
+        overlap_tokens=10,
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0].metadata["low_value"] is True
+    assert is_low_value_chunk(chunks[0].content) is True

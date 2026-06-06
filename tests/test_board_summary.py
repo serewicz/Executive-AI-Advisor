@@ -118,6 +118,7 @@ def test_board_summary_includes_citations():
     assert citation["page_start"] == 1
     assert citation["page_end"] == 1
     assert citation["excerpt"] == "Identity governance gaps create operational risk."
+    assert citation["full_source_text"] == "Identity governance gaps create operational risk."
 
 
 def test_invalid_document_id_returns_404():
@@ -218,3 +219,64 @@ def test_board_summary_evidence_cites_source_labels():
 
     assert response.status_code == 200
     assert "[S1]" in response.json()["memo"]["evidence"][0]
+
+
+def test_board_summary_skips_table_of_contents_chunk():
+    document = make_document()
+    toc_chunk = make_chunk(
+        document.id,
+        chunk_index=0,
+        content="Contents Executive Summary ........ 1 Security Assessment ........ 4 Cloud Cost ........ 8",
+    )
+    toc_chunk.chunk_metadata = {"low_value": True}
+    useful_chunk = make_chunk(
+        document.id,
+        chunk_index=1,
+        content="Security governance gaps create board-level access review risk.",
+    )
+    session = FakeBoardSummarySession(document=document, chunks=[toc_chunk, useful_chunk])
+    app.dependency_overrides[get_db] = override_db(session)
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/advisor/board-summary",
+            json={"document_id": str(document.id), "summary_type": "security_governance"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    citation = response.json()["citations"][0]
+    assert citation["chunk_id"] == str(useful_chunk.id)
+    assert "Contents" not in citation["excerpt"]
+
+
+def test_board_summary_citations_use_extracted_excerpts():
+    document = make_document()
+    content = (
+        "This opening background sentence is intentionally long and describes general company history "
+        "without discussing the diligence issue. "
+        + "x " * 300
+        + "Security governance gaps create access control risk for the board. "
+        "The board should monitor privileged access reviews and incident readiness. "
+        "Commercial updates and unrelated roadmap notes follow after the risk discussion."
+    )
+    chunk = make_chunk(document.id, content=content)
+    session = FakeBoardSummarySession(document=document, chunks=[chunk])
+    app.dependency_overrides[get_db] = override_db(session)
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/advisor/board-summary",
+            json={"document_id": str(document.id), "summary_type": "security_governance"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    citation = response.json()["citations"][0]
+    assert len(citation["excerpt"]) < len(content)
+    assert "Security governance" in citation["excerpt"]
+    assert "access control risk" in citation["excerpt"]

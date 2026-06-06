@@ -21,6 +21,11 @@ from app.advisor.schemas import (
     SummaryType,
 )
 from app.models.document import Document, DocumentChunk
+from app.retrieval.evidence import (
+    extract_relevant_excerpt,
+    is_low_value_chunk,
+    relevance_reason,
+)
 from app.retrieval.vector_search import SearchResult, search_similar_chunks
 
 
@@ -62,17 +67,7 @@ def answer_executive_question(
         )
         for index, result in enumerate(results, start=1)
     ]
-    citations = [
-        AdvisorCitation(
-            document_id=result.document_id,
-            document_title=result.document_title,
-            chunk_id=result.chunk_id,
-            page_start=result.page_start,
-            page_end=result.page_end,
-            excerpt=result.content[:1000],
-        )
-        for result in results
-    ]
+    citations = _build_advisor_citations(results, question)
 
     if not results:
         return AdvisorAskResponse(
@@ -132,18 +127,7 @@ def generate_board_summary(
         )
         for index, result in enumerate(results, start=1)
     ]
-    citations = [
-        Citation(
-            source_label=f"S{index}",
-            document_id=result.document_id,
-            document_title=result.document_title,
-            chunk_id=result.chunk_id,
-            page_start=result.page_start,
-            page_end=result.page_end,
-            excerpt=result.content[:1000],
-        )
-        for index, result in enumerate(results, start=1)
-    ]
+    citations = _build_citations(results, SUMMARY_TYPE_QUERIES[summary_type])
 
     provider = get_llm_provider()
     llm_response = provider.generate_board_summary(
@@ -214,7 +198,55 @@ def _load_ordered_chunks(document: Document, top_k: int, db: Session) -> list[Se
             similarity_score=0.0,
             source_type=document.source_type,
             classification=document.classification,
+            chunk_metadata=chunk.chunk_metadata or {},
         )
         for chunk in chunks
-        if " ".join(chunk.content.split())
+        if _is_useful_chunk(chunk)
     ]
+
+
+def _is_useful_chunk(chunk: DocumentChunk) -> bool:
+    normalized = " ".join(chunk.content.split())
+    if not normalized:
+        return False
+    return not bool((chunk.chunk_metadata or {}).get("low_value")) and not is_low_value_chunk(normalized)
+
+
+def _build_advisor_citations(results: list[SearchResult], query: str) -> list[AdvisorCitation]:
+    return [
+        AdvisorCitation(
+            source_label=f"S{index}",
+            document_id=result.document_id,
+            document_title=result.document_title,
+            chunk_id=result.chunk_id,
+            page_start=result.page_start,
+            page_end=result.page_end,
+            excerpt=excerpt,
+            relevance_reason=relevance_reason(excerpt, query),
+            full_source_text=result.content,
+        )
+        for index, result in enumerate(results, start=1)
+        for excerpt in [_excerpt_for_result(result, query)]
+    ]
+
+
+def _build_citations(results: list[SearchResult], query: str) -> list[Citation]:
+    return [
+        Citation(
+            source_label=f"S{index}",
+            document_id=result.document_id,
+            document_title=result.document_title,
+            chunk_id=result.chunk_id,
+            page_start=result.page_start,
+            page_end=result.page_end,
+            excerpt=excerpt,
+            relevance_reason=relevance_reason(excerpt, query),
+            full_source_text=result.content,
+        )
+        for index, result in enumerate(results, start=1)
+        for excerpt in [_excerpt_for_result(result, query)]
+    ]
+
+
+def _excerpt_for_result(result: SearchResult, query: str) -> str:
+    return extract_relevant_excerpt(result.content, query, max_chars=500)

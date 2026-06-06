@@ -63,6 +63,23 @@ def make_rows():
     ]
 
 
+def test_low_value_chunks_are_excluded_from_search_results(monkeypatch):
+    document = make_document()
+    toc_chunk = make_chunk(document.id, 0, "Contents Executive Summary ........ 1 Security ........ 2")
+    toc_chunk.chunk_metadata = {"low_value": True}
+    useful_chunk = make_chunk(document.id, 1, "Security governance risks require board review.")
+    session = FakeSearchSession([(toc_chunk, document, 0.01), (useful_chunk, document, 0.20)])
+    monkeypatch.setattr(
+        "app.retrieval.vector_search.embed_texts",
+        lambda texts: [[0.5] * 1536 for _ in texts],
+    )
+
+    results = search_similar_chunks(query="security governance risks", db=session)
+
+    assert len(results) == 1
+    assert results[0].chunk_id == useful_chunk.id
+
+
 def test_search_endpoint_returns_ranked_results(monkeypatch):
     rows = make_rows()
     session = FakeSearchSession(rows)

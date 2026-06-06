@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from app.retrieval.evidence import is_low_value_chunk
+
 
 class PageLike(Protocol):
     page_number: int
@@ -55,6 +57,7 @@ def chunk_document_pages(
                         "target_tokens": target_tokens,
                         "overlap_tokens": overlap_tokens,
                         "token_estimator": "word_count_div_0.75",
+                        "low_value": is_low_value_chunk(content),
                     },
                 )
             )

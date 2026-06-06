@@ -15,6 +15,7 @@ from app.diligence.schemas import (
 )
 from app.diligence.scoring import confidence_for_results, score_assessment
 from app.models.document import Document, DocumentChunk
+from app.retrieval.evidence import is_low_value_chunk
 from app.retrieval.vector_search import SearchResult, search_similar_chunks
 
 
@@ -116,10 +117,18 @@ def _load_ordered_chunks(document: Document, top_k: int, db: Session) -> list[Se
             similarity_score=0.0,
             source_type=document.source_type,
             classification=document.classification,
+            chunk_metadata=chunk.chunk_metadata or {},
         )
         for chunk in chunks
-        if " ".join(chunk.content.split())
+        if _is_useful_chunk(chunk)
     ]
+
+
+def _is_useful_chunk(chunk: DocumentChunk) -> bool:
+    normalized = " ".join(chunk.content.split())
+    if not normalized:
+        return False
+    return not bool((chunk.chunk_metadata or {}).get("low_value")) and not is_low_value_chunk(normalized)
 
 
 def _build_source_contexts(results: list[SearchResult]) -> list[SourceContext]:

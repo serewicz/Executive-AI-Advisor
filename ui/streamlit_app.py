@@ -500,17 +500,30 @@ def _render_citations(citations: list[dict[str, Any]], title: str, use_expanders
 
         if use_expanders:
             with st.expander(heading):
-                st.write(citation.get("excerpt", ""))
+                _render_citation_body(citation)
                 st.caption(f"Document ID: {citation.get('document_id')}")
                 st.caption(f"Chunk ID: {citation.get('chunk_id')}")
+                if citation.get("full_source_text") and st.toggle(
+                    f"Full source text {label}",
+                    value=False,
+                    key=f"full_source_{citation.get('chunk_id', index)}_{title}",
+                ):
+                    st.code(citation.get("full_source_text", ""), language="text")
         else:
             with st.container():
                 st.markdown(f"**{heading}**")
-                st.markdown(citation.get("excerpt", ""))
+                _render_citation_body(citation)
                 st.caption(f"Document ID: {citation.get('document_id')}")
                 st.caption(f"Chunk ID: {citation.get('chunk_id')}")
                 if index < len(citations):
                     st.divider()
+
+
+def _render_citation_body(citation: dict[str, Any]) -> None:
+    if citation.get("relevance_reason"):
+        st.caption(citation.get("relevance_reason"))
+    st.markdown("**Relevant excerpt**")
+    st.markdown(citation.get("excerpt", ""))
 
 
 def _build_markdown_memo(response: dict[str, Any]) -> str:
@@ -542,11 +555,28 @@ def _build_markdown_memo(response: dict[str, Any]) -> str:
                 f"- Pages: {citation.get('page_start', '?')}-{citation.get('page_end', '?')}",
                 f"- Document ID: `{citation.get('document_id', '')}`",
                 f"- Chunk ID: `{citation.get('chunk_id', '')}`",
+                f"- Relevance: {citation.get('relevance_reason') or 'Not specified.'}",
+                "",
+                "**Relevant excerpt**",
                 "",
                 citation.get("excerpt", ""),
                 "",
             ]
         )
+        if citation.get("full_source_text"):
+            lines.extend(
+                [
+                    "<details>",
+                    "<summary>Full source text</summary>",
+                    "",
+                    "```text",
+                    citation.get("full_source_text", ""),
+                    "```",
+                    "",
+                    "</details>",
+                    "",
+                ]
+            )
 
     return "\n".join(lines).strip() + "\n"
 
@@ -589,11 +619,28 @@ def _build_evaluation_markdown(response: dict[str, Any]) -> str:
                     f"- Pages: {citation.get('page_start', '?')}-{citation.get('page_end', '?')}",
                     f"- Document ID: `{citation.get('document_id', '')}`",
                     f"- Chunk ID: `{citation.get('chunk_id', '')}`",
+                    f"- Relevance: {citation.get('relevance_reason') or 'Not specified.'}",
+                    "",
+                    "**Relevant excerpt**",
                     "",
                     citation.get("excerpt", ""),
                     "",
                 ]
             )
+            if citation.get("full_source_text"):
+                lines.extend(
+                    [
+                        "<details>",
+                        "<summary>Full source text</summary>",
+                        "",
+                        "```text",
+                        citation.get("full_source_text", ""),
+                        "```",
+                        "",
+                        "</details>",
+                        "",
+                    ]
+                )
 
     return "\n".join(lines).strip() + "\n"
 

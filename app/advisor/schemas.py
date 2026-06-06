@@ -26,12 +26,15 @@ class AdvisorAskRequest(BaseModel):
 
 
 class AdvisorCitation(BaseModel):
+    source_label: str
     document_id: UUID
     document_title: str
     chunk_id: UUID
     page_start: int
     page_end: int
     excerpt: str
+    relevance_reason: str | None = None
+    full_source_text: str | None = None
 
 
 class AdvisorAskResponse(BaseModel):
@@ -52,6 +55,8 @@ class Citation(BaseModel):
     page_start: int
     page_end: int
     excerpt: str
+    relevance_reason: str | None = None
+    full_source_text: str | None = None
 
 
 class BoardMemo(BaseModel):

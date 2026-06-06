@@ -20,6 +20,11 @@ class SearchResult:
     similarity_score: float
     source_type: str
     classification: str
+    chunk_metadata: dict | None = None
+
+    @property
+    def low_value(self) -> bool:
+        return bool((self.chunk_metadata or {}).get("low_value"))
 
 
 def search_similar_chunks(
@@ -29,6 +34,7 @@ def search_similar_chunks(
     document_id: UUID | None = None,
     source_type: str | None = None,
     classification: str | None = None,
+    include_low_value: bool = False,
 ) -> list[SearchResult]:
     normalized_query = " ".join(query.split())
     if not normalized_query:
@@ -51,6 +57,8 @@ def search_similar_chunks(
         statement = statement.where(Document.classification == classification)
     if document_id is not None:
         statement = statement.where(Document.id == document_id)
+    if not include_low_value:
+        statement = statement.where(DocumentChunk.chunk_metadata["low_value"].as_boolean().is_not(True))
 
     rows = db.execute(statement).all()
     return [
@@ -65,6 +73,8 @@ def search_similar_chunks(
             similarity_score=round(max(0.0, min(1.0, 1 - float(distance))), 6),
             source_type=document.source_type,
             classification=document.classification,
+            chunk_metadata=chunk.chunk_metadata or {},
         )
         for chunk, document, distance in rows
+        if include_low_value or not bool((chunk.chunk_metadata or {}).get("low_value"))
     ]
