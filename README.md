@@ -61,6 +61,8 @@ Current milestone:
 │   └── init-db.sql
 ├── tests
 │   └── test_health.py
+├── ui
+│   └── streamlit_app.py
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
@@ -114,6 +116,18 @@ The FastAPI docs are available at:
 
 ```text
 http://localhost:8000/docs
+```
+
+Run the Streamlit executive demo UI in a separate terminal:
+
+```bash
+streamlit run ui/streamlit_app.py
+```
+
+The UI uses `API_BASE_URL` to reach the backend and defaults to:
+
+```bash
+API_BASE_URL=http://localhost:8000
 ```
 
 Upload a PDF document:
