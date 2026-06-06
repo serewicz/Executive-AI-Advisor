@@ -91,6 +91,8 @@ docker compose up --build
 
 Docker runs `alembic upgrade head` before starting the API so local databases receive the latest schema changes.
 
+The Docker Compose stack starts the FastAPI backend at `http://localhost:8000`. It does not start the Streamlit UI.
+
 3. For non-Docker local development, apply migrations before starting the API:
 
 ```bash
@@ -118,6 +120,8 @@ The FastAPI docs are available at:
 http://localhost:8000/docs
 ```
 
+Opening `http://localhost:8000` shows a small API landing response. The executive demo website runs separately on Streamlit at `http://localhost:8501`.
+
 Run the Streamlit executive demo UI from a second terminal. Streamlit runs on your host machine, so install the Python dependencies locally first:
 
 ```bash
@@ -128,6 +132,12 @@ Then start the UI:
 
 ```bash
 streamlit run ui/streamlit_app.py
+```
+
+After Streamlit starts, open:
+
+```text
+http://localhost:8501
 ```
 
 The UI uses `API_BASE_URL` to reach the FastAPI backend and defaults to:
