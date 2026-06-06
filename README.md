@@ -42,6 +42,10 @@ Start here:
 
 [Quick Start](docs/QuickStart.md)
 
+## Security Notice
+
+Executive AI Advisor is currently safe for a local executive demo on your own machine. It is not ready to expose publicly. Before hosting it on a shared network or public URL, add authentication, lock down the database port, set `APP_DEBUG=false`, run Uvicorn without `--reload`, and protect or disable public API docs.
+
 Short version:
 
 ```bash

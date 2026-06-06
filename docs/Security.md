@@ -2,6 +2,25 @@
 
 Executive AI Advisor is designed for board-facing and diligence workflows where model outputs, source documents, and deployment artifacts must be explainable and auditable.
 
+## Local Demo Vs Hosted Use
+
+The current application is safe for a local executive demo on your own machine. It is not ready to expose publicly.
+
+Before hosting Executive AI Advisor on a shared network, public URL, or cloud environment, add at minimum:
+
+- Authentication for the FastAPI backend and Streamlit UI
+- Authorization checks for documents, pages, chunks, Q&A, board summaries, and evaluation runs
+- Database port lockdown; do not expose Postgres publicly
+- Strong non-default database credentials
+- `APP_DEBUG=false`
+- A production Uvicorn/Gunicorn command without `--reload`
+- Protected or disabled public API docs
+- TLS termination
+- Upload scanning and stricter file-type controls
+- Audit logging for document access and generated outputs
+
+The default Docker Compose stack is intentionally optimized for local development. It publishes FastAPI on `localhost:8000`, Streamlit is run separately on `localhost:8501`, and PostgreSQL is exposed for local developer convenience. Do not treat this configuration as a production deployment profile.
+
 ## Software Supply Chain
 
 All release builds are expected to produce verifiable SLSA L3 provenance for the Dockerized RAG service.
