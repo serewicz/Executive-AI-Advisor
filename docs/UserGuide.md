@@ -37,10 +37,11 @@ The standard workflow is:
 3. Chunk parsed pages into retrieval-ready passages.
 4. Embed chunks for semantic search.
 5. Ask executive questions.
-6. Generate a board summary.
-7. Inspect citations and evidence.
-8. Evaluate output quality.
-9. Export Markdown memo or evaluation report.
+6. Run technology due diligence assessments.
+7. Generate a board summary.
+8. Inspect citations and evidence.
+9. Evaluate output quality.
+10. Export Markdown memo or evaluation report.
 
 ## Document Upload
 
@@ -106,6 +107,29 @@ Board summaries include:
 - citations
 
 The Streamlit UI can export the board memo as Markdown.
+
+## Technology Due Diligence Assessments
+
+The diligence module produces structured assessments for:
+
+- architecture
+- security
+- technical debt
+- key person risk
+- AI readiness
+
+Each assessment returns:
+
+- executive summary
+- score from 1 to 5
+- findings
+- risks
+- recommendations
+- citations
+- confidence
+- limitations
+
+The current implementation uses deterministic scoring and retrieved document evidence. It is intended to support diligence review, not replace technical interviews, architecture walkthroughs, or security testing.
 
 ## Citations And Evidence
 

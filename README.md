@@ -31,6 +31,7 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 - Generate embeddings with local providers by default
 - Search embedded chunks with pgvector
 - Ask cited executive questions
+- Run technology due diligence assessments
 - Generate board summaries with citations, confidence, and limitations
 - Render workflows in Streamlit without raw JSON
 - Export board memos and evaluation reports as Markdown
@@ -82,7 +83,8 @@ Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:
 4. Embed chunks with a local or optional OpenAI provider.
 5. Search with pgvector.
 6. Generate cited Q&A or board memos.
-7. Evaluate output quality and store evaluation runs.
+7. Run technology due diligence assessments.
+8. Evaluate output quality and store evaluation runs.
 
 See [Architecture](docs/Architecture.md) for the full system design.
 

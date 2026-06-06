@@ -26,6 +26,8 @@ flowchart LR
     Search --> Advisor["Advisor service"]
     Advisor --> LLM["Mock or OpenAI LLM provider"]
     Advisor --> Answers["Cited Q&A and board memos"]
+    Search --> Diligence["Diligence service"]
+    Diligence --> Assessments["Technology diligence assessments"]
     Answers --> Evaluation["Evaluation service"]
     Evaluation --> DB
 ```
@@ -41,7 +43,8 @@ flowchart LR
 7. pgvector search: query embeddings are compared against chunk embeddings using cosine distance.
 8. Cited Q&A: retrieved chunks are labeled as sources and passed to the advisor service.
 9. Board memo generation: board summary prompts create structured memo sections using retrieved chunks only.
-10. Evaluation: advisor answers are scored for citation quality, groundedness, relevance, and executive usefulness.
+10. Technology diligence: the diligence service scores architecture, security, technical debt, key person risk, and AI readiness using retrieved evidence.
+11. Evaluation: advisor answers are scored for citation quality, groundedness, relevance, and executive usefulness.
 
 ## Core Components
 
@@ -54,6 +57,7 @@ flowchart LR
 - Embedding providers: local embeddings by default, OpenAI embeddings optionally.
 - LLM providers: mock provider by default, OpenAI chat provider optionally.
 - Advisor service: cited Q&A and board memo generation.
+- Diligence service: technology due diligence assessments with scores, risks, recommendations, and citations.
 - Evaluation service: deterministic scoring and persistent evaluation runs.
 
 ## Provider Strategy
