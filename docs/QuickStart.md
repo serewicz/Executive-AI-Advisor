@@ -134,6 +134,8 @@ Suggested first question:
 What cybersecurity risks are disclosed?
 ```
 
+For exact click-by-click instructions with the synthetic datasets, see [Exact Demo Tutorial](ExactDemoTutorial.md).
+
 ## API Workflow
 
 Upload a PDF:
@@ -171,10 +173,13 @@ curl -X POST http://localhost:8000/advisor/ask \
   -d '{
     "question": "What cybersecurity risks are disclosed?",
     "top_k": 5,
+    "document_id": "00000000-0000-0000-0000-000000000000",
     "source_type": null,
     "classification": null
   }'
 ```
+
+Omit `document_id` only when you intentionally want global search across all embedded documents.
 
 Generate a board summary:
 

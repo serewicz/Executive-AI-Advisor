@@ -6,6 +6,8 @@ You are reviewing a company and need a board-level technology risk summary. The 
 
 The goal of the demo is to show that Executive AI Advisor can turn long-form source material into cited executive outputs with evaluation built into the workflow.
 
+For exact setup and click-by-click instructions, see [Exact Demo Tutorial](ExactDemoTutorial.md).
+
 ## Demo Setup
 
 Start the API and database:
@@ -133,6 +135,8 @@ Talking point:
 
 Retrieval and generation are separated. The system first retrieves relevant evidence, then uses those sources to produce a cited answer.
 
+Leave Search across all documents unchecked for document-scoped Q&A. Turn it on only when demonstrating global retrieval across multiple uploaded documents.
+
 ### 6. Generate Board Summary
 
 Choose a summary type such as:
@@ -154,6 +158,8 @@ Open the citation cards.
 Talking point:
 
 Every material claim should be reviewable against source excerpts and page ranges. The goal is not just answer generation; it is inspectable decision support.
+
+Citations show metadata first, concise relevant excerpts second, and full source text only when the user asks to inspect it.
 
 ### 8. Run Evaluation
 

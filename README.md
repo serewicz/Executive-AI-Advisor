@@ -15,10 +15,12 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 - Secure document ingestion
 - PDF parsing and page-aware text extraction
 - Document chunking and lifecycle tracking
+- Low-value chunk filtering for table-of-contents and other weak evidence
 - Local and optional external embeddings
 - PostgreSQL and pgvector semantic search
-- Cited executive Q&A
+- Document-scoped cited executive Q&A
 - Board-level summary generation
+- Concise relevant citation excerpts with optional full source text
 - Streamlit executive demo UI
 - Deterministic evaluation workflows
 - AI governance, citation, and auditability patterns
@@ -30,7 +32,7 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 - Chunk documents into retrieval-ready passages
 - Generate embeddings with local providers by default
 - Search embedded chunks with pgvector
-- Ask cited executive questions
+- Ask cited executive questions scoped to the selected document by default
 - Run technology due diligence assessments
 - Generate board summaries with citations, confidence, and limitations
 - Render workflows in Streamlit without raw JSON
@@ -42,6 +44,10 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 Start here:
 
 [Quick Start](docs/QuickStart.md)
+
+For a step-by-step executive demo, use:
+
+[Exact Demo Tutorial](docs/ExactDemoTutorial.md)
 
 ## Security Notice
 
@@ -65,6 +71,7 @@ Open:
 ## Documentation
 
 - [Quick Start](docs/QuickStart.md)
+- [Exact Demo Tutorial](docs/ExactDemoTutorial.md)
 - [User Guide](docs/UserGuide.md)
 - [Architecture](docs/Architecture.md)
 - [Developer Guide](docs/DeveloperGuide.md)

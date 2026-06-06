@@ -84,6 +84,8 @@ What cybersecurity risks are disclosed?
 
 The system retrieves relevant chunks, assigns source labels such as `[S1]`, and produces an answer that should cite material claims.
 
+By default, Streamlit scopes Executive Q&A to the currently selected document. This prevents answers from pulling evidence from another uploaded document. Use Search across all documents only when you intentionally want global retrieval.
+
 Outputs include:
 
 - answer
@@ -92,6 +94,7 @@ Outputs include:
 - citations
 - source excerpts
 - page ranges
+- scope metadata
 
 ## Board Summary Generator
 
@@ -148,11 +151,13 @@ Citations connect an answer or memo claim back to source chunks. Citation cards 
 - source label
 - document title
 - page range
-- excerpt
+- relevant excerpt
+- relevance reason, when available
 - document ID
 - chunk ID
+- optional full source text
 
-This makes answers reviewable and helps users challenge or validate the system’s conclusions.
+The system filters low-value chunks, such as table-of-contents style passages, by default. Citation excerpts are query-aware and designed to show the most relevant passage rather than the full chunk. Full source text remains available when users need to inspect the broader context.
 
 ## Confidence And Limitations
 
