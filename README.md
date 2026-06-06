@@ -411,6 +411,54 @@ Current limitations:
 - No background jobs or streaming yet
 - Mock provider output is deterministic and intended for local development only
 
+## Evaluation Framework
+
+The evaluation framework provides a repeatable way to score advisor Q&A outputs for governance and quality review. It is designed to help reviewers identify whether answers are cited, grounded in retrieved evidence, relevant to the question, and useful for executive decision-making.
+
+Run an evaluation:
+
+```bash
+curl -X POST http://localhost:8000/evaluation/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "document_id": "00000000-0000-0000-0000-000000000000",
+    "evaluation_type": "advisor_qa",
+    "questions": [
+      {
+        "question": "What cybersecurity risks are disclosed?",
+        "expected_themes": ["security", "risk", "controls"]
+      }
+    ]
+  }'
+```
+
+Default evaluation questions are stored in:
+
+```text
+docs/evaluation/default_questions.json
+```
+
+Current scoring categories:
+
+- `citation_score`: checks whether citations exist and source labels appear in the answer
+- `groundedness_score`: checks whether the answer is non-empty, cited, and includes limitations
+- `relevance_score`: uses deterministic keyword overlap between the question, expected themes, answer, and citation excerpts
+- `executive_usefulness_score`: rewards executive-oriented language around risks, actions, board monitoring, confidence, controls, and limitations
+
+Each evaluation run is stored in Postgres as an `EvaluationRun` record with the questions, scored results, average score, and timestamp.
+
+The Streamlit demo includes an Evaluation section that can run the default question set, show per-question scores, display citations and notes, and download a Markdown evaluation report.
+
+Current limitations:
+
+- Deterministic scoring only
+- No RAGAS integration yet
+- No LLM-as-judge yet
+- No multi-document evaluation
+- No background evaluation jobs
+
+Future evaluator support can add RAGAS, LLM-as-judge rubrics, regression baselines, and release gates. Evaluation matters for governance because it creates an auditable quality record for generated advisor outputs instead of relying on subjective spot checks.
+
 ## Configuration
 
 Runtime configuration is loaded from environment variables and `.env` using `pydantic-settings`.
