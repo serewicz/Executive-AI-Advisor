@@ -16,6 +16,7 @@ SOURCE_TYPES = [
     "board_material",
 ]
 CLASSIFICATIONS = ["confidential", "internal", "restricted", "public"]
+EVALUATION_READY_STATUSES = {"chunked", "embedded", "indexed"}
 SUMMARY_TYPES = [
     "technology_risk",
     "diligence_summary",
@@ -36,6 +37,8 @@ LOCAL_UI_STATE_KEYS = [
     "qa_response",
     "board_summary",
     "evaluation_response",
+    "evaluation_questions_text",
+    "evaluation_questions_initialized",
 ]
 
 
@@ -83,6 +86,8 @@ def _initialize_state() -> None:
         "qa_response": None,
         "board_summary": None,
         "evaluation_response": None,
+        "evaluation_questions_text": "",
+        "evaluation_questions_initialized": False,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -461,27 +466,90 @@ def _render_evaluation_section() -> None:
         '<div class="section-note">Run deterministic checks for citation quality, groundedness, relevance, and executive usefulness.</div>',
         unsafe_allow_html=True,
     )
-    if st.session_state.active_document_set_id:
-        st.info("Evaluation is currently single-document only. Select one document from the active investigation.")
+    default_questions = _load_default_evaluation_questions()
+    default_question_text = _evaluation_questions_to_text(default_questions)
+    if not st.session_state.evaluation_questions_initialized:
+        st.session_state.evaluation_questions_text = default_question_text
+        st.session_state.evaluation_questions_initialized = True
 
-    document_id = st.text_input(
-        "Evaluation document ID",
-        value=_active_document_id(),
-        placeholder="Paste or upload a document ID",
-        key="evaluation_document_id",
+    active_document_set_id = st.session_state.active_document_set_id
+    active_document_id = _active_document_id()
+    scope_options = ["Single Document"]
+    default_scope_index = 0
+    if active_document_set_id:
+        scope_options.insert(0, "Active Investigation / Document Set")
+        default_scope_index = 0
+
+    scope = st.radio(
+        "Evaluation Scope",
+        scope_options,
+        index=default_scope_index,
+        horizontal=True,
+        key="evaluation_scope",
     )
-    questions = _load_default_evaluation_questions()
 
-    with st.expander("Default evaluation questions", expanded=False):
-        for question in questions:
-            st.markdown(f"- {question['question']}")
+    document_id = ""
+    if scope == "Active Investigation / Document Set":
+        st.info(
+            "Single-document evaluation only. Select one processed document from the active investigation."
+        )
+        document_id = _render_evaluation_document_selector(st.session_state.uploaded_documents)
+    else:
+        document_id = st.text_input(
+            "Evaluation document ID",
+            value=active_document_id,
+            placeholder="Paste or upload a document ID",
+            key="evaluation_document_id",
+        ).strip()
 
-    if st.button("Run Evaluation", disabled=not document_id.strip(), use_container_width=True):
+    question_mode = st.radio(
+        "Question Mode",
+        ["Default question set", "Custom questions"],
+        horizontal=True,
+        key="evaluation_question_mode",
+    )
+
+    question_col1, question_col2 = st.columns(2)
+    with question_col1:
+        if st.button("Reset to default questions", use_container_width=True):
+            st.session_state.evaluation_questions_text = default_question_text
+            st.rerun()
+    with question_col2:
+        if st.button("Clear evaluation questions", use_container_width=True):
+            st.session_state.evaluation_questions_text = ""
+            st.session_state.evaluation_questions_initialized = True
+            st.rerun()
+
+    if question_mode == "Default question set":
+        st.caption("The default set is editable before running evaluation.")
+    else:
+        st.caption("Enter one custom evaluation question per line.")
+
+    questions_text = st.text_area(
+        "Evaluation questions",
+        key="evaluation_questions_text",
+        height=180,
+        placeholder="Enter one evaluation question per line.",
+    )
+    questions = _evaluation_questions_from_text(questions_text, default_questions)
+
+    missing_requirements = _evaluation_missing_requirements(
+        scope=scope,
+        document_id=document_id,
+        questions=questions,
+        active_document_set_id=active_document_set_id,
+        available_documents=st.session_state.uploaded_documents,
+    )
+    if missing_requirements:
+        for requirement in missing_requirements:
+            st.info(requirement)
+
+    if st.button("Run Evaluation", disabled=bool(missing_requirements), use_container_width=True):
         with st.spinner("Running deterministic evaluation"):
             response = _post_json(
                 "/evaluation/run",
                 {
-                    "document_id": document_id.strip(),
+                    "document_id": document_id,
                     "evaluation_type": "advisor_qa",
                     "questions": questions,
                 },
@@ -597,6 +665,99 @@ def _load_default_evaluation_questions() -> list[dict[str, Any]]:
                 "expected_themes": ["board", "monitor", "risk"],
             },
         ]
+
+
+def _evaluation_questions_to_text(questions: list[dict[str, Any]]) -> str:
+    return "\n".join(question["question"] for question in questions if question.get("question"))
+
+
+def _evaluation_questions_from_text(
+    questions_text: str,
+    default_questions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    expected_themes_by_question = {
+        question["question"]: question.get("expected_themes")
+        for question in default_questions
+        if question.get("question")
+    }
+    questions = []
+    for line in questions_text.splitlines():
+        question = line.strip()
+        if not question:
+            continue
+        questions.append(
+            {
+                "question": question,
+                "expected_themes": expected_themes_by_question.get(question),
+            }
+        )
+    return questions
+
+
+def _evaluation_ready_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        document
+        for document in documents
+        if str(document.get("status", "")).lower() in EVALUATION_READY_STATUSES
+    ]
+
+
+def _render_evaluation_document_selector(documents: list[dict[str, Any]]) -> str:
+    if not documents:
+        st.warning("Upload and process at least one document.")
+        return ""
+
+    ready_documents = _evaluation_ready_documents(documents)
+    if not ready_documents:
+        st.warning("Upload and process at least one document.")
+        st.caption("Evaluation-ready statuses: chunked, embedded, indexed.")
+        for document in documents:
+            st.caption(f"{document.get('filename', 'Untitled document')} - {document.get('status', 'unknown')}")
+        return ""
+
+    labels = [
+        f"{document.get('filename', 'Untitled document')} ({document.get('status', 'unknown')})"
+        for document in ready_documents
+    ]
+    active_document_id = _active_document_id()
+    selected_index = 0
+    for index, document in enumerate(ready_documents):
+        if document.get("document_id") == active_document_id:
+            selected_index = index
+            break
+
+    selected_label = st.selectbox(
+        "Select document to evaluate",
+        labels,
+        index=selected_index,
+        key="evaluation_selected_document_label",
+    )
+    selected_document = ready_documents[labels.index(selected_label)]
+    st.caption(f"Document ID: {selected_document.get('document_id', '')}")
+    return selected_document.get("document_id", "")
+
+
+def _evaluation_missing_requirements(
+    scope: str,
+    document_id: str,
+    questions: list[dict[str, Any]],
+    active_document_set_id: str,
+    available_documents: list[dict[str, Any]],
+) -> list[str]:
+    missing = []
+    if scope == "Active Investigation / Document Set" and not active_document_set_id:
+        missing.append("Select or create an investigation.")
+    if scope == "Active Investigation / Document Set" and active_document_set_id:
+        if not _evaluation_ready_documents(available_documents):
+            missing.append("Upload and process at least one document.")
+    if not document_id:
+        if scope == "Single Document":
+            missing.append("Upload and process at least one document.")
+        elif "Upload and process at least one document." not in missing:
+            missing.append("Upload and process at least one document.")
+    if not questions:
+        missing.append("Enter at least one evaluation question.")
+    return missing
 
 
 def _run_processing_step(step: str) -> None:
@@ -719,6 +880,8 @@ def _clear_local_ui_state() -> None:
             st.session_state[key] = []
         elif key in {"qa_response", "board_summary", "evaluation_response"}:
             st.session_state[key] = None
+        elif key == "evaluation_questions_initialized":
+            st.session_state[key] = False
         else:
             st.session_state[key] = ""
 
