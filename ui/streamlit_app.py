@@ -23,6 +23,20 @@ SUMMARY_TYPES = [
     "security_governance",
     "board_brief",
 ]
+LOCAL_UI_STATE_KEYS = [
+    "document_id",
+    "summary_document_id",
+    "active_document_id",
+    "active_document_set_id",
+    "active_document_set_name",
+    "uploaded_documents",
+    "selected_documents",
+    "uploaded_filename",
+    "document_status",
+    "qa_response",
+    "board_summary",
+    "evaluation_response",
+]
 
 
 def main() -> None:
@@ -59,10 +73,13 @@ def _initialize_state() -> None:
     defaults = {
         "document_id": "",
         "summary_document_id": "",
+        "active_document_id": "",
         "uploaded_filename": "",
         "document_status": "",
         "active_document_set_id": "",
         "active_document_set_name": "",
+        "uploaded_documents": [],
+        "selected_documents": [],
         "qa_response": None,
         "board_summary": None,
         "evaluation_response": None,
@@ -149,20 +166,33 @@ def _render_workspace_section() -> None:
         if st.button("Clear active investigation selection", use_container_width=True):
             _clear_active_document_set()
             st.rerun()
+        if st.button("Clear Local UI State", use_container_width=True):
+            _clear_local_ui_state()
+            st.success("Local UI state cleared. Backend data was not deleted.")
+            st.rerun()
 
     if not st.session_state.active_document_set_id:
         st.info("Create or select an investigation before uploading diligence PDFs.")
         return
 
-    detail = _get_json(f"/document-sets/{st.session_state.active_document_set_id}")
+    refresh_col, _spacer = st.columns([1, 2])
+    if refresh_col.button("Refresh Investigation", use_container_width=True):
+        detail = _load_active_document_set_detail()
+        if detail:
+            _sync_active_document_set_state(detail)
+            st.success("Investigation refreshed from backend.")
+        st.rerun()
+
+    detail = _load_active_document_set_detail()
     if not detail:
         return
+    _sync_active_document_set_state(detail)
 
     st.markdown(f"<div class='workspace-active'>Active investigation: {detail['name']}</div>", unsafe_allow_html=True)
     if detail.get("description"):
         st.caption(detail["description"])
 
-    documents = detail.get("documents", [])
+    documents = st.session_state.uploaded_documents
     st.markdown("#### Documents in scope")
     if not documents:
         st.info("No documents have been added to this investigation yet.")
@@ -179,9 +209,7 @@ def _render_workspace_section() -> None:
                 "DELETE",
                 f"/document-sets/{st.session_state.active_document_set_id}/documents/{document['document_id']}",
             )
-            if st.session_state.document_id == document["document_id"]:
-                st.session_state.document_id = ""
-                st.session_state.summary_document_id = ""
+            _remove_document_from_local_state(document["document_id"])
             st.rerun()
 
 
@@ -229,15 +257,23 @@ def _render_upload_section() -> None:
                 )
                 if response is None:
                     continue
+                document_id = response.get("document_id")
+                if not document_id:
+                    st.error(f"Upload for {uploaded_file.name} did not return a document_id. Skipping it.")
+                    continue
                 uploaded_count += 1
-                st.session_state.document_id = response["document_id"]
-                st.session_state.summary_document_id = response["document_id"]
+                st.session_state.document_id = document_id
+                st.session_state.active_document_id = document_id
+                st.session_state.summary_document_id = document_id
                 st.session_state.uploaded_filename = response.get("filename", uploaded_file.name)
                 st.session_state.document_status = response.get("status", "uploaded")
         st.session_state.qa_response = None
         st.session_state.board_summary = None
         st.session_state.evaluation_response = None
         if uploaded_count:
+            detail = _load_active_document_set_detail()
+            if detail:
+                _sync_active_document_set_state(detail)
             st.success(f"Uploaded {uploaded_count} document(s) to active investigation.")
             st.rerun()
 
@@ -258,10 +294,23 @@ def _render_processing_section() -> None:
 
     document_set_id = st.session_state.active_document_set_id
     if document_set_id:
-        if st.button("Process active investigation", use_container_width=True):
+        if st.button("Process All", use_container_width=True):
+            detail = _load_active_document_set_detail()
+            if not detail:
+                return
+            _sync_active_document_set_state(detail)
+            if not st.session_state.uploaded_documents:
+                st.warning("No backend documents are currently attached to this investigation.")
+                return
             response = _post_json(f"/document-sets/{document_set_id}/process", {})
             if response:
-                st.success(f"Processed {len(response.get('documents', []))} document(s) in active investigation.")
+                documents = response.get("documents", [])
+                st.success(f"Processed {len(documents)} document(s) in active investigation.")
+                for document in documents:
+                    st.write(f"- {document.get('filename')}: **{document.get('status')}**")
+                refreshed = _load_active_document_set_detail()
+                if refreshed:
+                    _sync_active_document_set_state(refreshed)
                 st.rerun()
         st.caption("Runs parse, chunk, and embed for documents in the active investigation that need processing.")
         return
@@ -614,18 +663,38 @@ def _format_error(response: requests.Response) -> str:
         return f"Backend returned {response.status_code}: {response.text}"
 
     detail = payload.get("detail", payload)
+    if response.status_code == 404 and isinstance(detail, str) and "Document not found" in detail:
+        _remove_document_from_local_state(_extract_uuid_from_text(detail))
+        return (
+            "This document no longer exists in the backend. "
+            "Refresh the investigation or clear local UI state."
+        )
+    if response.status_code == 404 and isinstance(detail, str) and "Document set not found" in detail:
+        _clear_active_document_set()
+        return (
+            "This investigation no longer exists in the backend. "
+            "Refresh the investigation list or clear local UI state."
+        )
     return f"Backend returned {response.status_code}: {detail}"
 
 
 def _active_document_id() -> str:
-    return (st.session_state.get("summary_document_id") or st.session_state.document_id or "").strip()
+    return (
+        st.session_state.get("summary_document_id")
+        or st.session_state.get("active_document_id")
+        or st.session_state.document_id
+        or ""
+    ).strip()
 
 
 def _set_active_document_set(document_set_id: str, name: str) -> None:
     st.session_state.active_document_set_id = document_set_id
     st.session_state.active_document_set_name = name
     st.session_state.document_id = ""
+    st.session_state.active_document_id = ""
     st.session_state.summary_document_id = ""
+    st.session_state.uploaded_documents = []
+    st.session_state.selected_documents = []
     st.session_state.qa_response = None
     st.session_state.board_summary = None
     st.session_state.evaluation_response = None
@@ -635,10 +704,94 @@ def _clear_active_document_set() -> None:
     st.session_state.active_document_set_id = ""
     st.session_state.active_document_set_name = ""
     st.session_state.document_id = ""
+    st.session_state.active_document_id = ""
     st.session_state.summary_document_id = ""
+    st.session_state.uploaded_documents = []
+    st.session_state.selected_documents = []
     st.session_state.qa_response = None
     st.session_state.board_summary = None
     st.session_state.evaluation_response = None
+
+
+def _clear_local_ui_state() -> None:
+    for key in LOCAL_UI_STATE_KEYS:
+        if key in {"uploaded_documents", "selected_documents"}:
+            st.session_state[key] = []
+        elif key in {"qa_response", "board_summary", "evaluation_response"}:
+            st.session_state[key] = None
+        else:
+            st.session_state[key] = ""
+
+
+def _load_active_document_set_detail() -> dict[str, Any] | None:
+    document_set_id = st.session_state.active_document_set_id
+    if not document_set_id:
+        return None
+    detail = _get_json(f"/document-sets/{document_set_id}")
+    if detail is None:
+        return None
+    return detail
+
+
+def _sync_active_document_set_state(detail: dict[str, Any]) -> None:
+    documents = detail.get("documents", [])
+    backend_document_ids = {document["document_id"] for document in documents}
+
+    st.session_state.active_document_set_id = detail.get(
+        "document_set_id",
+        st.session_state.get("active_document_set_id", ""),
+    )
+    st.session_state.active_document_set_name = detail.get(
+        "name",
+        st.session_state.get("active_document_set_name", ""),
+    )
+    st.session_state.uploaded_documents = documents
+    st.session_state.selected_documents = [
+        document_id
+        for document_id in st.session_state.get("selected_documents", [])
+        if document_id in backend_document_ids
+    ]
+
+    for key in ("document_id", "active_document_id", "summary_document_id"):
+        if st.session_state.get(key) and st.session_state[key] not in backend_document_ids:
+            st.session_state[key] = ""
+
+    if documents and not _active_document_id():
+        latest = documents[0]
+        st.session_state.document_id = latest["document_id"]
+        st.session_state.active_document_id = latest["document_id"]
+        st.session_state.summary_document_id = latest["document_id"]
+        st.session_state.uploaded_filename = latest.get("filename", "")
+        st.session_state.document_status = latest.get("status", "")
+
+
+def _remove_document_from_local_state(document_id: str | None) -> None:
+    if not document_id:
+        return
+    st.session_state.uploaded_documents = [
+        document for document in st.session_state.get("uploaded_documents", [])
+        if document.get("document_id") != document_id
+    ]
+    st.session_state.selected_documents = [
+        selected for selected in st.session_state.get("selected_documents", [])
+        if selected != document_id
+    ]
+    for key in ("document_id", "active_document_id", "summary_document_id"):
+        if st.session_state.get(key) == document_id:
+            st.session_state[key] = ""
+    st.session_state.qa_response = None
+    st.session_state.board_summary = None
+    st.session_state.evaluation_response = None
+
+
+def _extract_uuid_from_text(text: str) -> str | None:
+    import re
+
+    match = re.search(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        text,
+    )
+    return match.group(0) if match else None
 
 
 def _render_confidence(confidence: str) -> None:

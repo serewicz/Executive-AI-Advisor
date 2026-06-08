@@ -134,8 +134,6 @@ def process_document_set(document_set_id: UUID, db: Session = Depends(get_db)) -
 def attach_document_to_set(document_set_id: UUID, document_id: UUID, db: Session) -> None:
     if db.get(DocumentSet, document_set_id) is None:
         raise LookupError(f"Document set not found: {document_set_id}")
-    if db.get(Document, document_id) is None:
-        raise LookupError(f"Document not found: {document_id}")
     if db.get(DocumentSetDocument, {"document_set_id": document_set_id, "document_id": document_id}) is None:
         db.add(DocumentSetDocument(document_set_id=document_set_id, document_id=document_id))
 
