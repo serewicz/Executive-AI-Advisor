@@ -23,6 +23,7 @@ def ask_advisor(request: AdvisorAskRequest, db: Session = Depends(get_db)) -> Ad
             db=db,
             top_k=request.top_k,
             document_id=request.document_id,
+            document_set_id=request.document_set_id,
             source_type=request.source_type,
             classification=request.classification,
         )
@@ -41,6 +42,7 @@ def board_summary(request: BoardSummaryRequest, db: Session = Depends(get_db)) -
     try:
         return generate_board_summary(
             document_id=request.document_id,
+            document_set_id=request.document_set_id,
             summary_type=request.summary_type,
             top_k=request.top_k,
             db=db,

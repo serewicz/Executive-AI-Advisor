@@ -17,10 +17,19 @@ class FakeExecuteResult:
 
 
 class FakeSearchSession:
-    def __init__(self, rows):
+    def __init__(self, rows, document_set_document_ids=None):
         self.rows = rows
+        self.document_set_document_ids = document_set_document_ids
 
     def execute(self, statement):
+        if self.document_set_document_ids is not None and "document_set_documents" in str(statement):
+            return FakeExecuteResult(
+                [
+                    (chunk, document, distance)
+                    for chunk, document, distance in self.rows
+                    if document.id in self.document_set_document_ids
+                ]
+            )
         return FakeExecuteResult(self.rows)
 
 
@@ -78,6 +87,25 @@ def test_low_value_chunks_are_excluded_from_search_results(monkeypatch):
 
     assert len(results) == 1
     assert results[0].chunk_id == useful_chunk.id
+
+
+def test_search_scoped_to_document_set_excludes_unrelated_documents(monkeypatch):
+    included_document = make_document()
+    unrelated_document = make_document()
+    included_chunk = make_chunk(included_document.id, 0, "SampleCo risks include key-person dependency.")
+    unrelated_chunk = make_chunk(unrelated_document.id, 0, "FinTechCo payment risks should not appear.")
+    session = FakeSearchSession(
+        [(included_chunk, included_document, 0.10), (unrelated_chunk, unrelated_document, 0.11)],
+        document_set_document_ids={included_document.id},
+    )
+    monkeypatch.setattr(
+        "app.retrieval.vector_search.embed_texts",
+        lambda texts: [[0.5] * 1536 for _ in texts],
+    )
+
+    results = search_similar_chunks(query="technology risks", db=session, document_set_id=uuid4())
+
+    assert {result.document_id for result in results} == {included_document.id}
 
 
 def test_search_endpoint_returns_ranked_results(monkeypatch):

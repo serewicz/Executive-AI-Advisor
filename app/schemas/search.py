@@ -9,6 +9,8 @@ from app.schemas.document import DocumentClassification, DocumentSourceType
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=settings.max_search_query_chars)
     top_k: int = Field(default=5, ge=1, le=20)
+    document_id: UUID | None = None
+    document_set_id: UUID | None = None
     source_type: DocumentSourceType | None = None
     classification: DocumentClassification | None = None
 

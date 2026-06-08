@@ -46,6 +46,16 @@ Suggested documents:
 
 Use a document that can be discussed publicly if the demo is being shown outside a confidential environment.
 
+## Investigation Workspace Setup
+
+Create one workspace per company or deal before uploading documents. For example:
+
+- `SampleCo Diligence`
+- `FinTechCo Diligence`
+- `AcquisitionTargetCo Diligence`
+
+The active workspace is the default analysis scope. Previous company documents are excluded unless Search across all documents is explicitly selected.
+
 ## Synthetic Demo Datasets
 
 The repository includes synthetic Markdown datasets that can be converted to PDF or copied into demo packets for upload.
@@ -83,41 +93,26 @@ Use AcquisitionTargetCo when the audience wants to see acquisition diligence for
 
 In Streamlit:
 
-1. Open Document Upload.
-2. Choose a PDF.
-3. Select `source_type`.
-4. Select `classification`.
-5. Click Upload PDF.
+1. Create or select an Investigation Workspace.
+2. Open Document Upload.
+3. Choose one or more PDFs.
+4. Select `source_type`.
+5. Select `classification`.
+6. Click Upload PDFs.
 
 Talking point:
 
 The system captures governance metadata at the moment of ingestion. This is important for future filtering, audit, and access-control workflows.
 
-### 2. Parse Document
+### 2. Process Investigation
 
-Click Parse document.
-
-Talking point:
-
-The parser stores page-aware text so later citations can point back to page ranges rather than anonymous text blobs.
-
-### 3. Chunk Document
-
-Click Chunk document.
+Click Process active investigation.
 
 Talking point:
 
-Chunking prepares the document for retrieval. Chunks preserve page ranges, which enables evidence cards and citations.
+Processing parses, chunks, and embeds every document in the active investigation that needs processing. Local embeddings are the default, reducing cost and data exposure during demos.
 
-### 4. Embed Document
-
-Click Embed document.
-
-Talking point:
-
-Local embeddings are the default. That reduces cost and data exposure during demos and supports confidential or air-gapped environments.
-
-### 5. Ask Executive Question
+### 3. Ask Executive Question
 
 Suggested question:
 
@@ -135,9 +130,9 @@ Talking point:
 
 Retrieval and generation are separated. The system first retrieves relevant evidence, then uses those sources to produce a cited answer.
 
-Leave Search across all documents unchecked for document-scoped Q&A. Turn it on only when demonstrating global retrieval across multiple uploaded documents.
+Leave Search across all documents unchecked for investigation-scoped Q&A. Turn it on only when demonstrating global retrieval across multiple uploaded documents.
 
-### 6. Generate Board Summary
+### 4. Generate Board Summary
 
 Choose a summary type such as:
 
@@ -151,7 +146,7 @@ Talking point:
 
 The board memo is structured for executive review: summary, risks, evidence, board questions, recommended actions, limitations, confidence, and citations.
 
-### 7. Inspect Citations
+### 5. Inspect Citations
 
 Open the citation cards.
 
@@ -161,15 +156,15 @@ Every material claim should be reviewable against source excerpts and page range
 
 Citations show metadata first, concise relevant excerpts second, and full source text only when the user asks to inspect it.
 
-### 8. Run Evaluation
+### 6. Run Evaluation
 
 Open the Evaluation section and click Run Evaluation.
 
 Talking point:
 
-Evaluation is part of trust, not an afterthought. The system scores citation quality, groundedness, relevance, and executive usefulness.
+Evaluation is currently single-document. It is part of trust, not an afterthought. The system scores citation quality, groundedness, relevance, and executive usefulness.
 
-### 9. Export Markdown Memo
+### 7. Export Markdown Memo
 
 Use Download Board Memo.md or Download Evaluation Report.md.
 

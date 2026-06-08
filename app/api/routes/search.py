@@ -16,6 +16,8 @@ def search_documents(request: SearchRequest, db: Session = Depends(get_db)) -> S
             query=request.query,
             db=db,
             top_k=request.top_k,
+            document_id=request.document_id,
+            document_set_id=request.document_set_id,
             source_type=request.source_type,
             classification=request.classification,
         )

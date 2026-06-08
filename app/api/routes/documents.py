@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.api.routes.document_sets import attach_document_to_set
 from app.db.dependencies import get_db
 from app.ingestion.parser import PDFParsingError
 from app.ingestion.pipeline import (
@@ -46,6 +47,7 @@ def upload_document(
     file: Annotated[UploadFile, File(description="PDF document to upload")],
     source_type: Annotated[DocumentSourceType, Form()],
     classification: Annotated[DocumentClassification, Form()],
+    document_set_id: Annotated[UUID | None, Form()] = None,
     db: Session = Depends(get_db),
 ) -> DocumentUploadResponse:
     if not file.filename:
@@ -79,7 +81,13 @@ def upload_document(
 
     try:
         db.add(document)
+        if document_set_id is not None:
+            attach_document_to_set(document_set_id, document.id, db)
         db.commit()
+    except LookupError as exc:
+        db.rollback()
+        file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except Exception:
         db.rollback()
         file_path.unlink(missing_ok=True)

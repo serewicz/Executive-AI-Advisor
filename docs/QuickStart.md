@@ -117,16 +117,15 @@ API_BASE_URL=http://localhost:8000 streamlit run ui/streamlit_app.py
 
 Use the Streamlit UI for the quickest end-to-end path.
 
-1. Upload a PDF.
-2. Select `source_type`.
-3. Select `classification`.
-4. Parse the document.
-5. Chunk the document.
-6. Embed the document.
-7. Ask an executive question.
-8. Generate a board summary.
-9. Run evaluation.
-10. Download the Markdown memo or evaluation report.
+1. Create or select an investigation workspace.
+2. Upload one or more PDFs.
+3. Select `source_type`.
+4. Select `classification`.
+5. Process the active investigation.
+6. Ask an executive question.
+7. Generate a board summary.
+8. Run evaluation for a selected document.
+9. Download the Markdown memo or evaluation report.
 
 Suggested first question:
 
@@ -144,7 +143,8 @@ Upload a PDF:
 curl -X POST http://localhost:8000/documents/upload \
   -F "file=@/path/to/document.pdf;type=application/pdf" \
   -F "source_type=board_material" \
-  -F "classification=confidential"
+  -F "classification=confidential" \
+  -F "document_set_id=00000000-0000-0000-0000-000000000000"
 ```
 
 Parse:

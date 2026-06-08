@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -60,6 +60,10 @@ class Document(Base):
         cascade="all, delete-orphan",
         order_by="ParsedDocumentPage.page_number",
     )
+    document_set_links: Mapped[list["DocumentSetDocument"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
 
 
 class ParsedDocumentPage(Base):
@@ -114,3 +118,49 @@ class DocumentChunk(Base):
     )
 
     document: Mapped[Document] = relationship(back_populates="chunks")
+
+
+class DocumentSet(Base):
+    __tablename__ = "document_sets"
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    document_links: Mapped[list["DocumentSetDocument"]] = relationship(
+        back_populates="document_set",
+        cascade="all, delete-orphan",
+    )
+
+
+class DocumentSetDocument(Base):
+    __tablename__ = "document_set_documents"
+    __table_args__ = (
+        UniqueConstraint("document_set_id", "document_id", name="uq_document_set_documents"),
+    )
+
+    document_set_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_sets.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    document_set: Mapped[DocumentSet] = relationship(back_populates="document_links")
+    document: Mapped[Document] = relationship(back_populates="document_set_links")

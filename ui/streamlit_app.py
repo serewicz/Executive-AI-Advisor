@@ -34,6 +34,8 @@ def main() -> None:
     st.caption("Board-facing document intelligence demo")
     st.divider()
 
+    _render_workspace_section()
+    st.divider()
     _render_upload_section()
     st.divider()
     _render_processing_section()
@@ -59,6 +61,8 @@ def _initialize_state() -> None:
         "summary_document_id": "",
         "uploaded_filename": "",
         "document_status": "",
+        "active_document_set_id": "",
+        "active_document_set_name": "",
         "qa_response": None,
         "board_summary": None,
         "evaluation_response": None,
@@ -83,47 +87,159 @@ def _apply_styles() -> None:
         .confidence-medium { background: #fff6df; color: #7a4b00; }
         .confidence-low { background: #fbeaea; color: #8a1f1f; }
         .section-note { color: #5f6368; font-size: 0.92rem; }
+        .workspace-active { font-size: 1.05rem; font-weight: 650; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
 
+def _render_workspace_section() -> None:
+    st.header("Investigation Workspace")
+    st.markdown(
+        '<div class="section-note">Use one workspace per company or deal so prior investigations stay out of scope.</div>',
+        unsafe_allow_html=True,
+    )
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        with st.form("create_workspace_form", clear_on_submit=True):
+            name = st.text_input("New investigation name", placeholder="SampleCo Diligence")
+            description = st.text_area(
+                "Description",
+                placeholder="Synthetic B2B SaaS diligence package",
+                height=80,
+            )
+            submitted = st.form_submit_button("Create new investigation", use_container_width=True)
+        if submitted:
+            if not name.strip():
+                st.warning("Name the investigation before creating it.")
+            else:
+                response = _post_json(
+                    "/document-sets",
+                    {"name": name.strip(), "description": description.strip() or None},
+                    expected_status={201},
+                )
+                if response:
+                    _set_active_document_set(response["document_set_id"], response["name"])
+                    st.rerun()
+
+    document_sets = _get_json("/document-sets") or {"document_sets": []}
+    options = document_sets.get("document_sets", [])
+    labels = ["No active investigation"] + [
+        f"{item['name']} ({item.get('document_count', 0)} docs)" for item in options
+    ]
+    active_id = st.session_state.active_document_set_id
+    selected_index = 0
+    for index, item in enumerate(options, start=1):
+        if item["document_set_id"] == active_id:
+            selected_index = index
+            break
+
+    with col2:
+        selected = st.selectbox("Select existing investigation", labels, index=selected_index)
+        if selected != labels[selected_index]:
+            if selected == labels[0]:
+                _clear_active_document_set()
+            else:
+                selected_item = options[labels.index(selected) - 1]
+                _set_active_document_set(selected_item["document_set_id"], selected_item["name"])
+            st.rerun()
+
+        if st.button("Clear active investigation selection", use_container_width=True):
+            _clear_active_document_set()
+            st.rerun()
+
+    if not st.session_state.active_document_set_id:
+        st.info("Create or select an investigation before uploading diligence PDFs.")
+        return
+
+    detail = _get_json(f"/document-sets/{st.session_state.active_document_set_id}")
+    if not detail:
+        return
+
+    st.markdown(f"<div class='workspace-active'>Active investigation: {detail['name']}</div>", unsafe_allow_html=True)
+    if detail.get("description"):
+        st.caption(detail["description"])
+
+    documents = detail.get("documents", [])
+    st.markdown("#### Documents in scope")
+    if not documents:
+        st.info("No documents have been added to this investigation yet.")
+        return
+
+    for document in documents:
+        cols = st.columns([3, 1, 1, 1])
+        cols[0].markdown(f"**{document['filename']}**")
+        cols[0].caption(f"Document ID: {document['document_id']}")
+        cols[1].metric("Status", document["status"])
+        cols[2].caption(f"{document['source_type']} / {document['classification']}")
+        if cols[3].button("Remove", key=f"remove_{document['document_id']}"):
+            _request(
+                "DELETE",
+                f"/document-sets/{st.session_state.active_document_set_id}/documents/{document['document_id']}",
+            )
+            if st.session_state.document_id == document["document_id"]:
+                st.session_state.document_id = ""
+                st.session_state.summary_document_id = ""
+            st.rerun()
+
+
 def _render_upload_section() -> None:
     st.header("Document Upload")
     st.markdown(
-        '<div class="section-note">Upload a PDF and capture the governance metadata used downstream.</div>',
+        '<div class="section-note">Upload one or more PDFs into the active investigation workspace.</div>',
         unsafe_allow_html=True,
     )
 
     with st.form("upload_form", clear_on_submit=False):
-        uploaded_file = st.file_uploader("PDF file", type=["pdf"])
+        uploaded_files = st.file_uploader(
+            "Upload diligence PDFs",
+            type=["pdf"],
+            accept_multiple_files=True,
+        )
         col1, col2 = st.columns(2)
         with col1:
             source_type = st.selectbox("Source type", SOURCE_TYPES)
         with col2:
             classification = st.selectbox("Classification", CLASSIFICATIONS)
 
-        submitted = st.form_submit_button("Upload PDF", use_container_width=True)
+        submitted = st.form_submit_button(
+            "Upload PDFs",
+            disabled=not st.session_state.active_document_set_id,
+            use_container_width=True,
+        )
 
     if submitted:
-        if uploaded_file is None:
-            st.warning("Select a PDF before uploading.")
+        if not st.session_state.active_document_set_id:
+            st.warning("Create or select an investigation before uploading.")
+            return
+        if not uploaded_files:
+            st.warning("Select at least one PDF before uploading.")
             return
 
-        with st.spinner("Uploading document"):
-            response = _upload_document(uploaded_file, source_type, classification)
-
-        if response is None:
-            return
-
-        st.session_state.document_id = response["document_id"]
-        st.session_state.summary_document_id = response["document_id"]
-        st.session_state.uploaded_filename = response.get("filename", uploaded_file.name)
-        st.session_state.document_status = response.get("status", "uploaded")
+        uploaded_count = 0
+        with st.spinner("Uploading documents"):
+            for uploaded_file in uploaded_files:
+                response = _upload_document(
+                    uploaded_file,
+                    source_type,
+                    classification,
+                    document_set_id=st.session_state.active_document_set_id,
+                )
+                if response is None:
+                    continue
+                uploaded_count += 1
+                st.session_state.document_id = response["document_id"]
+                st.session_state.summary_document_id = response["document_id"]
+                st.session_state.uploaded_filename = response.get("filename", uploaded_file.name)
+                st.session_state.document_status = response.get("status", "uploaded")
         st.session_state.qa_response = None
         st.session_state.board_summary = None
         st.session_state.evaluation_response = None
+        if uploaded_count:
+            st.success(f"Uploaded {uploaded_count} document(s) to active investigation.")
+            st.rerun()
 
     if st.session_state.document_id:
         st.success("Document uploaded")
@@ -139,6 +255,16 @@ def _render_processing_section() -> None:
         '<div class="section-note">Run the document through parsing, chunking, and embedding.</div>',
         unsafe_allow_html=True,
     )
+
+    document_set_id = st.session_state.active_document_set_id
+    if document_set_id:
+        if st.button("Process active investigation", use_container_width=True):
+            response = _post_json(f"/document-sets/{document_set_id}/process", {})
+            if response:
+                st.success(f"Processed {len(response.get('documents', []))} document(s) in active investigation.")
+                st.rerun()
+        st.caption("Runs parse, chunk, and embed for documents in the active investigation that need processing.")
+        return
 
     document_id = _active_document_id()
     col1, col2, col3 = st.columns(3)
@@ -161,6 +287,7 @@ def _render_processing_section() -> None:
 def _render_qa_section() -> None:
     st.header("Executive Q&A")
     document_id = _active_document_id()
+    document_set_id = st.session_state.active_document_set_id
     question = st.text_area(
         "Question",
         value="What are the main technology risks?",
@@ -168,7 +295,11 @@ def _render_qa_section() -> None:
     )
     top_k = st.slider("Sources to retrieve", min_value=1, max_value=20, value=5, key="qa_top_k")
     search_globally = st.checkbox("Search across all documents", value=False)
-    if document_id and not search_globally:
+    if search_globally:
+        st.warning("Global search may include documents from other investigations.")
+    elif document_set_id:
+        st.caption(f"Scoped to active investigation: {st.session_state.active_document_set_name}")
+    elif document_id:
         st.caption(f"Scoped to document: {document_id}")
 
     if st.button("Ask Advisor", disabled=not question.strip(), use_container_width=True):
@@ -179,6 +310,7 @@ def _render_qa_section() -> None:
                     question=question.strip(),
                     top_k=top_k,
                     document_id=document_id,
+                    document_set_id=document_set_id,
                     search_globally=search_globally,
                 ),
             )
@@ -193,6 +325,8 @@ def _render_qa_section() -> None:
         scope = response.get("scope", "global")
         if scope == "document":
             st.caption(f"Search scope: document {response.get('document_id', '')}")
+        elif scope == "document_set":
+            st.caption(f"Search scope: investigation {response.get('document_set_id', '')}")
         else:
             st.caption("Search scope: all documents")
         _render_limitations(response.get("limitations", []))
@@ -203,7 +337,8 @@ def _build_qa_payload(
     question: str,
     top_k: int,
     document_id: str,
-    search_globally: bool,
+    document_set_id: str = "",
+    search_globally: bool = False,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "question": question,
@@ -211,7 +346,9 @@ def _build_qa_payload(
         "source_type": None,
         "classification": None,
     }
-    if document_id and not search_globally:
+    if document_set_id and not search_globally:
+        payload["document_set_id"] = document_set_id
+    elif document_id and not search_globally:
         payload["document_id"] = document_id
     return payload
 
@@ -230,18 +367,22 @@ def _render_board_summary_section() -> None:
     with col2:
         top_k = st.slider("Sources", min_value=3, max_value=25, value=12, key="summary_top_k")
 
-    if st.button("Generate Board Summary", disabled=not document_id.strip(), use_container_width=True):
+    document_set_id = st.session_state.active_document_set_id
+    if document_set_id:
+        st.caption(f"Defaults to active investigation: {st.session_state.active_document_set_name}")
+
+    disabled = not document_set_id and not document_id.strip()
+    if st.button("Generate Board Summary", disabled=disabled, use_container_width=True):
+        payload = {"summary_type": summary_type, "top_k": top_k}
+        if document_set_id:
+            payload["document_set_id"] = document_set_id
+        else:
+            payload["document_id"] = document_id.strip()
         with st.spinner("Generating board memo"):
-            response = _post_json(
-                "/advisor/board-summary",
-                {
-                    "document_id": document_id.strip(),
-                    "summary_type": summary_type,
-                    "top_k": top_k,
-                },
-            )
+            response = _post_json("/advisor/board-summary", payload)
         if response:
-            st.session_state.document_id = response["document_id"]
+            if response.get("document_id"):
+                st.session_state.document_id = response["document_id"]
             st.session_state.board_summary = response
 
     if st.session_state.board_summary:
@@ -271,6 +412,8 @@ def _render_evaluation_section() -> None:
         '<div class="section-note">Run deterministic checks for citation quality, groundedness, relevance, and executive usefulness.</div>',
         unsafe_allow_html=True,
     )
+    if st.session_state.active_document_set_id:
+        st.info("Evaluation is currently single-document only. Select one document from the active investigation.")
 
     document_id = st.text_input(
         "Evaluation document ID",
@@ -367,7 +510,12 @@ def _render_export_section() -> None:
         st.code(markdown, language="markdown")
 
 
-def _upload_document(uploaded_file, source_type: str, classification: str) -> dict[str, Any] | None:
+def _upload_document(
+    uploaded_file,
+    source_type: str,
+    classification: str,
+    document_set_id: str = "",
+) -> dict[str, Any] | None:
     files = {
         "file": (
             uploaded_file.name,
@@ -376,7 +524,13 @@ def _upload_document(uploaded_file, source_type: str, classification: str) -> di
         )
     }
     data = {"source_type": source_type, "classification": classification}
+    if document_set_id:
+        data["document_set_id"] = document_set_id
     return _request("POST", "/documents/upload", files=files, data=data, expected_status={201})
+
+
+def _get_json(path: str) -> dict[str, Any] | None:
+    return _request("GET", path)
 
 
 def _load_default_evaluation_questions() -> list[dict[str, Any]]:
@@ -419,8 +573,12 @@ def _run_processing_step(step: str) -> None:
         st.write(f"Chunks embedded: **{response['chunks_embedded']}**")
 
 
-def _post_json(path: str, payload: dict[str, Any]) -> dict[str, Any] | None:
-    return _request("POST", path, json=payload)
+def _post_json(
+    path: str,
+    payload: dict[str, Any],
+    expected_status: set[int] | None = None,
+) -> dict[str, Any] | None:
+    return _request("POST", path, json=payload, expected_status=expected_status)
 
 
 def _request(
@@ -461,6 +619,26 @@ def _format_error(response: requests.Response) -> str:
 
 def _active_document_id() -> str:
     return (st.session_state.get("summary_document_id") or st.session_state.document_id or "").strip()
+
+
+def _set_active_document_set(document_set_id: str, name: str) -> None:
+    st.session_state.active_document_set_id = document_set_id
+    st.session_state.active_document_set_name = name
+    st.session_state.document_id = ""
+    st.session_state.summary_document_id = ""
+    st.session_state.qa_response = None
+    st.session_state.board_summary = None
+    st.session_state.evaluation_response = None
+
+
+def _clear_active_document_set() -> None:
+    st.session_state.active_document_set_id = ""
+    st.session_state.active_document_set_name = ""
+    st.session_state.document_id = ""
+    st.session_state.summary_document_id = ""
+    st.session_state.qa_response = None
+    st.session_state.board_summary = None
+    st.session_state.evaluation_response = None
 
 
 def _render_confidence(confidence: str) -> None:
@@ -532,6 +710,8 @@ def _build_markdown_memo(response: dict[str, Any]) -> str:
         f"# {_format_summary_type(response.get('summary_type', 'board_brief'))}",
         "",
         f"Document ID: `{response.get('document_id', '')}`",
+        f"Investigation ID: `{response.get('document_set_id', '')}`",
+        f"Scope: `{response.get('scope', 'document')}`",
         f"Confidence: **{str(response.get('confidence', 'low')).title()}**",
         "",
         "## Executive Summary",

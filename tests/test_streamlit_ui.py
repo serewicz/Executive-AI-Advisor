@@ -21,3 +21,16 @@ def test_qa_payload_omits_document_id_when_global_search_selected():
     )
 
     assert "document_id" not in payload
+
+
+def test_qa_payload_prefers_document_set_scope():
+    payload = _build_qa_payload(
+        question="What are the main technology risks?",
+        top_k=5,
+        document_id="document-123",
+        document_set_id="set-456",
+        search_globally=False,
+    )
+
+    assert payload["document_set_id"] == "set-456"
+    assert "document_id" not in payload

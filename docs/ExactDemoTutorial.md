@@ -111,21 +111,18 @@ Convert it to a PDF, then upload the PDF through Streamlit.
 
 In Streamlit:
 
-1. Open Document Upload.
-2. Upload the SampleCo PDF.
-3. Set `source_type` to `technology_assessment` or `board_material`.
-4. Set `classification` to `confidential`.
-5. Click Upload PDF.
+1. Create an Investigation Workspace named `SampleCo Diligence`.
+2. Open Document Upload.
+3. Upload one or more SampleCo PDFs.
+4. Set `source_type` to `technology_assessment` or `board_material`.
+5. Set `classification` to `confidential`.
+6. Click Upload PDFs.
 
-Copy or keep visible the returned document ID. Streamlit stores the selected document ID for the rest of the workflow.
+The uploaded documents appear under the active investigation. Streamlit stores the active investigation as the default analysis scope.
 
-## 8. Process The Document
+## 8. Process The Investigation
 
-Use the Processing Pipeline buttons in order:
-
-1. Parse document.
-2. Chunk document.
-3. Embed document.
+Click Process active investigation.
 
 Expected lifecycle:
 
@@ -145,9 +142,9 @@ Leave Search across all documents unchecked.
 
 Expected behavior:
 
-- The answer is scoped to the selected document.
-- Citations come only from that document.
-- The response metadata shows document scope.
+- The answer is scoped to the active investigation.
+- Citations come only from the active investigation.
+- The response metadata shows investigation scope.
 - Citation cards show concise relevant excerpts.
 - Full source text is available only when expanded.
 

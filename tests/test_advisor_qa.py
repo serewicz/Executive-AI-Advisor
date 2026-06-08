@@ -8,17 +8,20 @@ from app.advisor.providers.openai_provider import OpenAIChatProvider
 from app.core.config import settings
 from app.db.dependencies import get_db
 from app.main import app
-from app.models.document import Document
+from app.models.document import Document, DocumentSet
 from app.retrieval.vector_search import SearchResult
 
 
 class FakeSession:
-    def __init__(self, document=None):
+    def __init__(self, document=None, document_set=None):
         self.document = document
+        self.document_set = document_set
 
     def get(self, model, object_id):
         if model is Document and self.document is not None and self.document.id == object_id:
             return self.document
+        if model is DocumentSet and self.document_set is not None and self.document_set.id == object_id:
+            return self.document_set
         return None
 
 
@@ -35,6 +38,10 @@ def make_document(filename="assessment.pdf"):
         classification="confidential",
         document_metadata={},
     )
+
+
+def make_document_set():
+    return DocumentSet(id=uuid4(), name="SampleCo Diligence", description="Synthetic diligence")
 
 
 def make_search_result(content="Cloud governance and security risks are material.", document_id=None):
@@ -172,6 +179,41 @@ def test_advisor_without_document_id_can_search_globally(monkeypatch):
         str(selected_document_id),
         str(other_document_id),
     }
+
+
+def test_advisor_with_document_set_id_only_returns_set_citations(monkeypatch):
+    document_set = make_document_set()
+    included_document_id = uuid4()
+    unrelated_document_id = uuid4()
+
+    def scoped_search(**kwargs):
+        assert kwargs["document_id"] is None
+        assert kwargs["document_set_id"] == document_set.id
+        return [
+            make_search_result("SampleCo architecture risk requires review.", document_id=included_document_id),
+        ]
+
+    monkeypatch.setattr("app.advisor.service.search_similar_chunks", scoped_search)
+    app.dependency_overrides[get_db] = override_db_with(FakeSession(document_set=document_set))
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/advisor/ask",
+            json={
+                "question": "What are the main technology risks?",
+                "document_set_id": str(document_set.id),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scope"] == "document_set"
+    assert body["document_set_id"] == str(document_set.id)
+    assert {citation["document_id"] for citation in body["citations"]} == {str(included_document_id)}
+    assert str(unrelated_document_id) not in {citation["document_id"] for citation in body["citations"]}
 
 
 def test_advisor_invalid_document_id_returns_404(monkeypatch):

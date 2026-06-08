@@ -13,6 +13,7 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 ## What It Demonstrates
 
 - Secure document ingestion
+- Diligence workspaces for company/deal isolation
 - PDF parsing and page-aware text extraction
 - Document chunking and lifecycle tracking
 - Low-value chunk filtering for table-of-contents and other weak evidence
@@ -28,11 +29,13 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 ## Current Capabilities
 
 - Upload PDFs with source type and classification metadata
+- Create diligence workspaces and upload multiple PDFs per investigation
 - Parse PDFs into page-level records
 - Chunk documents into retrieval-ready passages
 - Generate embeddings with local providers by default
 - Search embedded chunks with pgvector
-- Ask cited executive questions scoped to the selected document by default
+- Ask cited executive questions scoped to the active investigation by default
+- Scope Q&A and board summaries to the active investigation by default
 - Run technology due diligence assessments
 - Generate board summaries with citations, confidence, and limitations
 - Render workflows in Streamlit without raw JSON
@@ -93,13 +96,14 @@ Synthetic diligence datasets are available for local demos and testing:
 Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:
 
 1. Upload and classify a PDF.
-2. Parse it into page-aware text.
-3. Chunk text into retrieval passages.
-4. Embed chunks with a local or optional OpenAI provider.
-5. Search with pgvector.
-6. Generate cited Q&A or board memos.
-7. Run technology due diligence assessments.
-8. Evaluate output quality and store evaluation runs.
+2. Add it to a diligence workspace.
+3. Parse it into page-aware text.
+4. Chunk text into retrieval passages.
+5. Embed chunks with a local or optional OpenAI provider.
+6. Search with pgvector inside the selected investigation by default.
+7. Generate cited Q&A or board memos.
+8. Run technology due diligence assessments.
+9. Evaluate output quality and store evaluation runs.
 
 See [Architecture](docs/Architecture.md) for the full system design.
 

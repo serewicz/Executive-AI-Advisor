@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ingestion.embedder import embed_texts
-from app.models.document import Document, DocumentChunk
+from app.models.document import Document, DocumentChunk, DocumentSetDocument
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,7 @@ def search_similar_chunks(
     db: Session,
     top_k: int = 5,
     document_id: UUID | None = None,
+    document_set_id: UUID | None = None,
     source_type: str | None = None,
     classification: str | None = None,
     include_low_value: bool = False,
@@ -50,6 +51,10 @@ def search_similar_chunks(
         .order_by(cosine_distance)
         .limit(top_k)
     )
+
+    if document_id is None and document_set_id is not None:
+        statement = statement.join(DocumentSetDocument, DocumentSetDocument.document_id == Document.id)
+        statement = statement.where(DocumentSetDocument.document_set_id == document_set_id)
 
     if source_type is not None:
         statement = statement.where(Document.source_type == source_type)

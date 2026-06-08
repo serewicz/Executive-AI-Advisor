@@ -42,24 +42,39 @@ Metadata captured during upload includes:
 
 The standard workflow is:
 
-1. Upload a PDF.
-2. Parse the PDF into page-level text.
-3. Chunk parsed pages into retrieval-ready passages.
-4. Embed chunks for semantic search.
-5. Ask executive questions.
-6. Run technology due diligence assessments.
-7. Generate a board summary.
-8. Inspect citations and evidence.
-9. Evaluate output quality.
-10. Export Markdown memo or evaluation report.
+1. Create or select an investigation workspace.
+2. Upload one or more PDFs into that workspace.
+3. Parse PDFs into page-level text.
+4. Chunk parsed pages into retrieval-ready passages.
+5. Embed chunks for semantic search.
+6. Ask executive questions scoped to the active investigation.
+7. Run technology due diligence assessments.
+8. Generate a board summary.
+9. Inspect citations and evidence.
+10. Evaluate output quality.
+11. Export Markdown memo or evaluation report.
+
+## Investigation Workspaces
+
+Investigation workspaces, also called document sets, isolate documents by company, deal, or diligence effort. Use one workspace per company, such as `SampleCo Diligence` or `FinTechCo Diligence`.
+
+When an investigation is active:
+
+- uploaded PDFs are appended to that investigation
+- the document list shows exactly which files are in scope
+- Executive Q&A searches only documents in that investigation by default
+- board summaries use only documents in that investigation by default
+- previous company documents are excluded unless global search is explicitly selected
+
+Removing a document from an investigation removes only the association. It does not delete the uploaded document.
 
 ## Document Upload
 
-Upload a PDF through the Streamlit UI or API. During upload, choose a source type and classification. These fields support later governance, filtering, and audit workflows.
+Upload one or more PDFs through the Streamlit UI or API. During upload, choose a source type and classification. These fields support later governance, filtering, and audit workflows.
 
 ## Processing Pipeline
 
-The processing pipeline has three main actions:
+The processing pipeline can process the active investigation in one step. For single-document fallback workflows, the individual actions are:
 
 - Parse document: extracts page-aware text from the PDF.
 - Chunk document: converts parsed text into retrieval-ready chunks.
@@ -84,7 +99,7 @@ What cybersecurity risks are disclosed?
 
 The system retrieves relevant chunks, assigns source labels such as `[S1]`, and produces an answer that should cite material claims.
 
-By default, Streamlit scopes Executive Q&A to the currently selected document. This prevents answers from pulling evidence from another uploaded document. Use Search across all documents only when you intentionally want global retrieval.
+By default, Streamlit scopes Executive Q&A to the active investigation workspace. If no workspace is active, it can scope to the selected document. Use Search across all documents only when you intentionally want global retrieval. Global search may include documents from other investigations.
 
 Outputs include:
 
