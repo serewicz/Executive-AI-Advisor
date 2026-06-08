@@ -42,6 +42,12 @@ Docker Compose starts:
 - FastAPI at `http://localhost:8000`
 - PostgreSQL with pgvector
 
+The API container runs Alembic migrations before starting FastAPI. If you are updating an existing local database after pulling schema changes, you can also apply migrations explicitly:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
 The Streamlit UI is not started by Docker Compose. Run it separately from the host.
 
 Stop the stack:
@@ -275,13 +281,27 @@ Do not add RAGAS or LLM-as-judge calls until those are intentionally scoped and 
 
 ## Database Migrations
 
-The project uses Alembic for schema changes. Docker Compose runs:
+The project uses Alembic as the source of truth for schema creation and schema changes. Do not add `Base.metadata.create_all(...)` to application startup as a normal schema mechanism.
+
+Docker Compose runs:
 
 ```bash
 alembic upgrade head
 ```
 
-before starting the API.
+before starting the API. The command is idempotent, so it is safe to run again after the container is up:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+Fresh local setup:
+
+```bash
+docker compose up --build
+docker compose exec api alembic upgrade head
+curl http://localhost:8000/health
+```
 
 Create a migration after model changes:
 
@@ -289,9 +309,33 @@ Create a migration after model changes:
 alembic revision --autogenerate -m "describe change"
 ```
 
-Review generated migrations before committing them.
+Review generated migrations before committing them. Confirm the migration includes all intended table, column, index, constraint, and pgvector changes. If Alembic cannot render `Vector(1536)` correctly, edit the migration manually and import `Vector` from `pgvector.sqlalchemy`.
 
-Some early FastAPI scaffolds create tables directly through SQLAlchemy at startup. This project should continue using Alembic as the schema matures.
+Apply migrations after pulling schema changes:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+Reset the local development database only when you can delete local data:
+
+```bash
+docker compose down -v
+docker compose up --build
+docker compose exec api alembic upgrade head
+```
+
+Warning: `docker compose down -v` deletes the local PostgreSQL volume, including uploaded document metadata, parsed pages, chunks, embeddings, document sets, and evaluation runs.
+
+Useful Alembic commands:
+
+```bash
+docker compose exec api alembic current
+docker compose exec api alembic history
+docker compose exec api alembic upgrade head
+```
+
+Existing local development databases may need `docker compose exec api alembic upgrade head` after pulling new model changes. If migration history becomes inconsistent during local MVP development, a local reset is acceptable as long as you understand that it deletes local data.
 
 ## Coding Conventions
 

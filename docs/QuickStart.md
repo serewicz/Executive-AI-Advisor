@@ -52,7 +52,13 @@ Start FastAPI and PostgreSQL:
 docker compose up --build
 ```
 
-Docker runs Alembic migrations before starting the API. The API will be available at:
+Docker runs Alembic migrations before starting the API. You can safely apply them again after the stack is running:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+The API will be available at:
 
 ```text
 http://localhost:8000
@@ -225,6 +231,24 @@ Check logs:
 ```bash
 docker compose logs api
 ```
+
+### Missing Database Table
+
+If you see an error such as `relation "document_sets" does not exist`, apply the latest Alembic migrations:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+For a fresh local reset during development:
+
+```bash
+docker compose down -v
+docker compose up --build
+docker compose exec api alembic upgrade head
+```
+
+Warning: `docker compose down -v` deletes the local database volume and all local uploaded document metadata, chunks, embeddings, document sets, and evaluation runs.
 
 ### Docker Is Not Running
 

@@ -61,6 +61,7 @@ Short version:
 ```bash
 cp .env.example .env
 docker compose up --build
+docker compose exec api alembic upgrade head
 python -m pip install -r requirements.txt
 streamlit run ui/streamlit_app.py
 ```
@@ -106,6 +107,16 @@ Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:
 9. Evaluate output quality and store evaluation runs.
 
 See [Architecture](docs/Architecture.md) for the full system design.
+
+## Database Migrations
+
+Alembic is the source of truth for database schema creation and schema changes. Docker runs `alembic upgrade head` before starting the API, and the command can be run explicitly after pulling schema changes:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+If a local development volume has stale schema state, see [Quick Start](docs/QuickStart.md) or [Developer Guide](docs/DeveloperGuide.md) for the reset workflow. `docker compose down -v` deletes local database data.
 
 ## Project Status
 
