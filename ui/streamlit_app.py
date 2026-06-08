@@ -348,9 +348,19 @@ def _render_qa_section() -> None:
         height=110,
     )
     top_k = st.slider("Sources to retrieve", min_value=1, max_value=20, value=5, key="qa_top_k")
-    search_globally = st.checkbox("Search across all documents", value=False)
+    search_globally = st.checkbox(
+        "Industry Benchmark / Cross-Investigation Analysis",
+        value=False,
+        help=(
+            "Includes documents from other investigations and companies. "
+            "Use for benchmarking and trend analysis, not company-specific diligence."
+        ),
+    )
     if search_globally:
-        st.warning("Global search may include documents from other investigations.")
+        st.warning(
+            "Includes documents from other investigations and companies. "
+            "Use for benchmarking and trend analysis, not company-specific diligence."
+        )
     elif document_set_id:
         st.caption(f"Scoped to active investigation: {st.session_state.active_document_set_name}")
     elif document_id:
