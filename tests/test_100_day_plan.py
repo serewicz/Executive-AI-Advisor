@@ -8,6 +8,7 @@ from app.diligence.schemas import (
     TechnologyDiligenceFinding,
     TechnologyDiligencePlan,
     TechnologyDiligenceReport,
+    RiskHeatmapRow,
 )
 from app.main import app
 from app.planning.service import generate_100_day_plan
@@ -56,16 +57,27 @@ def make_finding(category, risk_rating, recommended_owner="CTO"):
 
 
 def make_report(document_set_id):
+    findings = [
+        make_finding("key_person_risk", "red", "CEO"),
+        make_finding("cloud_cost", "yellow", "CFO"),
+        make_finding("security", "green", "CISO"),
+    ]
     return TechnologyDiligenceReport(
         document_set_id=document_set_id,
         executive_summary="Technology diligence report summary.",
         overall_risk_rating="red",
         confidence="medium",
-        findings=[
-            make_finding("key_person_risk", "red", "CEO"),
-            make_finding("cloud_cost", "yellow", "CFO"),
-            make_finding("security", "green", "CISO"),
+        risk_heatmap=[
+            RiskHeatmapRow(
+                category=finding.category,
+                risk_rating=finding.risk_rating,
+                confidence=finding.confidence,
+                evidence_count=len(finding.citations),
+                primary_recommended_action=finding.recommended_action,
+            )
+            for finding in findings
         ],
+        findings=findings,
         top_5_risks=["Key person risk requires immediate action."],
         management_questions=["Who owns remediation?"],
         board_discussion_points=["Review risk progress."],
@@ -104,6 +116,7 @@ def test_100_day_plan_endpoint_works(monkeypatch):
     assert body["overall_priority"] == "high"
     assert body["executive_one_pager"]["executive_summary"]
     assert body["executive_one_pager"]["top_5_priorities"]
+    assert body["risk_heatmap"]
     assert body["plan_at_a_glance"]
     assert body["days_1_30"]
     assert body["days_31_60"]
@@ -410,6 +423,7 @@ def test_100_day_plan_markdown_export_works(monkeypatch):
 
     assert "# 100-Day Technology Plan" in markdown
     assert "## Executive Summary" in markdown
+    assert "## Executive Risk Heatmap" in markdown
     assert "## Days 1-30" in markdown
     assert "## Days 31-60" in markdown
     assert "## Days 61-90" in markdown
@@ -440,6 +454,7 @@ def test_100_day_plan_one_pager_markdown_export_works(monkeypatch):
     assert "## Current State" in markdown
     assert "## Target State" in markdown
     assert "## Overall Risk" in markdown
+    assert "## Executive Risk Heatmap" in markdown
     assert "## Top 5 Priorities" in markdown
     assert "## First 30 Days" in markdown
     assert "## Days 31-60" in markdown

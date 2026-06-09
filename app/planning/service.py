@@ -67,6 +67,7 @@ def generate_100_day_plan(
             success_metrics=success_metrics,
             dependencies=dependencies,
         ),
+        risk_heatmap=report.risk_heatmap,
         plan_at_a_glance=_plan_at_a_glance(plan_type),
         quick_wins=_quick_wins(plan_type),
         days_1_30=days_1_30,

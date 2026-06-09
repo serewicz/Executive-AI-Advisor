@@ -94,12 +94,21 @@ class TechnologyDiligencePlan(BaseModel):
     days_61_90: list[str]
 
 
+class RiskHeatmapRow(BaseModel):
+    category: TechnologyReportCategory
+    risk_rating: RiskRating
+    confidence: Confidence
+    evidence_count: int = Field(ge=0)
+    primary_recommended_action: str
+
+
 class TechnologyDiligenceReport(BaseModel):
     document_set_id: UUID
     report_type: Literal["technology_due_diligence"] = "technology_due_diligence"
     executive_summary: str
     overall_risk_rating: RiskRating
     confidence: Confidence
+    risk_heatmap: list[RiskHeatmapRow]
     findings: list[TechnologyDiligenceFinding]
     top_5_risks: list[str]
     management_questions: list[str]

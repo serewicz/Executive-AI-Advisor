@@ -3,12 +3,14 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.db.dependencies import get_db
+from app.diligence.schemas import TechnologyDiligenceCitation, TechnologyDiligenceFinding
 from app.diligence.scoring import (
     confidence_for_technology_results,
     confidence_rationale_for_results,
     risk_rating_for_category,
     risk_rationale_for_category,
 )
+from app.diligence.service import build_risk_heatmap
 from app.main import app
 from app.models.document import DocumentSet
 from app.retrieval.vector_search import SearchResult
@@ -46,6 +48,36 @@ def make_search_result(document_id=None, content=None):
         source_type="technology_assessment",
         classification="confidential",
         chunk_metadata={},
+    )
+
+
+def make_technology_citation(index=1):
+    return TechnologyDiligenceCitation(
+        source_label=f"S{index}",
+        document_id=uuid4(),
+        document_title="Technology Assessment",
+        chunk_id=uuid4(),
+        page_start=index,
+        page_end=index,
+        excerpt="Evidence excerpt.",
+        relevance_reason="Supports the heatmap row.",
+        full_source_text="Evidence excerpt.",
+    )
+
+
+def make_technology_finding(category, risk_rating, confidence, citation_count):
+    return TechnologyDiligenceFinding(
+        category=category,
+        title=f"{category} finding",
+        risk_rating=risk_rating,
+        confidence=confidence,
+        risk_rationale=f"{category} risk rationale.",
+        confidence_rationale=f"{category} confidence rationale.",
+        business_impact=f"{category} business impact.",
+        evidence_summary=f"{category} evidence summary.",
+        recommended_action=f"Remediate {category}.",
+        recommended_owner="CTO",
+        citations=[make_technology_citation(index) for index in range(1, citation_count + 1)],
     )
 
 
@@ -112,6 +144,7 @@ def test_technology_report_returns_expected_schema(monkeypatch):
     assert body["executive_summary"]
     assert body["overall_risk_rating"] in {"red", "yellow", "green"}
     assert body["confidence"] in {"high", "medium", "low"}
+    assert body["risk_heatmap"]
     assert body["findings"]
     assert body["top_5_risks"]
     assert body["management_questions"]
@@ -198,6 +231,15 @@ def test_technology_report_markdown_export_includes_main_sections():
         "executive_summary": "SampleCo has moderate technology diligence risk.",
         "overall_risk_rating": "yellow",
         "confidence": "medium",
+        "risk_heatmap": [
+            {
+                "category": "security",
+                "risk_rating": "yellow",
+                "confidence": "medium",
+                "evidence_count": 2,
+                "primary_recommended_action": "Validate security controls.",
+            }
+        ],
         "top_5_risks": ["Security governance requires validation."],
         "findings": [
             {
@@ -231,6 +273,7 @@ def test_technology_report_markdown_export_includes_main_sections():
     assert "# Technology Due Diligence Report" in markdown
     assert "## Executive Summary" in markdown
     assert "## Overall Risk Rating" in markdown
+    assert "## Executive Risk Heatmap" in markdown
     assert "## Top 5 Risks" in markdown
     assert "## Findings" in markdown
     assert "## Management Questions" in markdown
@@ -239,6 +282,22 @@ def test_technology_report_markdown_export_includes_main_sections():
     assert "## 30/60/90-Day Plan" in markdown
     assert "## Limitations" in markdown
     assert "## Citations" in markdown
+
+
+def test_risk_heatmap_aggregates_category_findings():
+    findings = [
+        make_technology_finding("architecture", "red", "high", citation_count=3),
+        make_technology_finding("security", "yellow", "medium", citation_count=2),
+        make_technology_finding("cloud_cost", "green", "low", citation_count=0),
+    ]
+
+    heatmap = build_risk_heatmap(findings)
+
+    assert [row.category for row in heatmap] == ["architecture", "security", "cloud_cost"]
+    assert [row.risk_rating for row in heatmap] == ["red", "yellow", "green"]
+    assert [row.confidence for row in heatmap] == ["high", "medium", "low"]
+    assert [row.evidence_count for row in heatmap] == [3, 2, 0]
+    assert heatmap[0].primary_recommended_action == "Remediate architecture."
 
 
 def test_founder_dependency_scores_red_with_medium_confidence():

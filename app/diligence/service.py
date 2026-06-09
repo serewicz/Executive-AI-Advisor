@@ -26,6 +26,7 @@ from app.diligence.schemas import (
     TechnologyDiligencePlan,
     TechnologyDiligenceReport,
     TechnologyReportCategory,
+    RiskHeatmapRow,
 )
 from app.diligence.scoring import (
     confidence_for_results,
@@ -52,6 +53,18 @@ class DiligenceValidationError(ValueError):
 
 class DiligenceDocumentSetNotFoundError(ValueError):
     pass
+
+
+RISK_HEATMAP_CATEGORY_ORDER: tuple[TechnologyReportCategory, ...] = (
+    "architecture",
+    "security",
+    "technical_debt",
+    "engineering_org",
+    "key_person_risk",
+    "ai_readiness",
+    "cloud_cost",
+    "integration_readiness",
+)
 
 
 def analyze_document(
@@ -136,6 +149,7 @@ def generate_technology_due_diligence_report(
         executive_summary=provider_draft.executive_summary or _build_report_executive_summary(findings),
         overall_risk_rating=overall_risk_rating(risk_ratings),
         confidence=overall_confidence([*confidences, provider_draft.confidence]),  # type: ignore[list-item]
+        risk_heatmap=_build_risk_heatmap(findings),
         findings=findings,
         top_5_risks=provider_draft.top_5_risks or _build_top_risks(findings),
         management_questions=provider_draft.management_questions or _build_management_questions(findings),
@@ -151,6 +165,10 @@ def generate_technology_due_diligence_report(
         ],
         citations=list(citation_map.values()),
     )
+
+
+def build_risk_heatmap(findings: list[TechnologyDiligenceFinding]) -> list[RiskHeatmapRow]:
+    return _build_risk_heatmap(findings)
 
 
 def _retrieve_report_results_by_category(
@@ -347,6 +365,21 @@ def _build_report_finding(
         recommended_owner=_recommended_owner(category),
         citations=citations,
     )
+
+
+def _build_risk_heatmap(findings: list[TechnologyDiligenceFinding]) -> list[RiskHeatmapRow]:
+    findings_by_category = {finding.category: finding for finding in findings}
+    return [
+        RiskHeatmapRow(
+            category=category,
+            risk_rating=finding.risk_rating,
+            confidence=finding.confidence,
+            evidence_count=len(finding.citations),
+            primary_recommended_action=finding.recommended_action,
+        )
+        for category in RISK_HEATMAP_CATEGORY_ORDER
+        if (finding := findings_by_category.get(category)) is not None
+    ]
 
 
 def _citation_label_text(citations: list[TechnologyDiligenceCitation]) -> str:

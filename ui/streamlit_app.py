@@ -1,5 +1,6 @@
 import json
 import os
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -547,6 +548,7 @@ def _render_technology_report(report: dict[str, Any]) -> None:
     st.markdown("#### Executive Summary")
     st.markdown(report.get("executive_summary", "No executive summary returned."))
 
+    _render_risk_heatmap(report.get("risk_heatmap", []))
     _render_list("Top 5 Risks", report.get("top_5_risks", []))
     _render_technology_findings(findings)
     _render_list("Management Questions", report.get("management_questions", []))
@@ -667,6 +669,7 @@ def _render_full_hundred_day_plan(plan: dict[str, Any]) -> None:
     st.markdown(plan.get("executive_summary", "No executive summary returned."))
 
     _render_plan_at_a_glance(plan.get("plan_at_a_glance", []))
+    _render_risk_heatmap(plan.get("risk_heatmap", []))
     if plan.get("quick_wins"):
         _render_list("Quick Wins", plan.get("quick_wins", []))
     _render_plan_actions("Days 1-30", plan.get("days_1_30", []))
@@ -709,6 +712,7 @@ def _render_hundred_day_one_pager(plan: dict[str, Any]) -> None:
     st.markdown("#### Overall Risk")
     st.markdown(one_pager.get("overall_risk", "Not provided."))
 
+    _render_risk_heatmap(plan.get("risk_heatmap", []))
     _render_list("Top 5 Priorities", one_pager.get("top_5_priorities", []))
     _render_list("First 30 Days", one_pager.get("first_30_days", []))
     _render_list("Days 31-60", one_pager.get("days_31_60", []))
@@ -1370,6 +1374,40 @@ def _risk_counts(findings: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _render_risk_heatmap(rows: list[dict[str, Any]]) -> None:
+    st.markdown("#### Executive Risk Heatmap")
+    if not rows:
+        st.markdown("No risk heatmap returned.")
+        return
+
+    table_rows = []
+    for row in rows:
+        table_rows.append(
+            "<tr>"
+            f"<td>{escape(_format_summary_type(str(row.get('category', ''))))}</td>"
+            f"<td>{render_risk_badge(str(row.get('risk_rating', 'green')))}</td>"
+            f"<td>{render_confidence_badge(str(row.get('confidence', 'low')))}</td>"
+            f"<td style=\"text-align:right;\">{int(row.get('evidence_count') or 0)}</td>"
+            f"<td>{escape(str(row.get('primary_recommended_action', '')))}</td>"
+            "</tr>"
+        )
+
+    st.markdown(
+        "<table style=\"width:100%;border-collapse:collapse;\">"
+        "<thead><tr>"
+        "<th style=\"text-align:left;border-bottom:1px solid #ddd;padding:0.4rem;\">Category</th>"
+        "<th style=\"text-align:left;border-bottom:1px solid #ddd;padding:0.4rem;\">Risk Rating</th>"
+        "<th style=\"text-align:left;border-bottom:1px solid #ddd;padding:0.4rem;\">Confidence</th>"
+        "<th style=\"text-align:right;border-bottom:1px solid #ddd;padding:0.4rem;\">Evidence Count</th>"
+        "<th style=\"text-align:left;border-bottom:1px solid #ddd;padding:0.4rem;\">Primary Recommended Action</th>"
+        "</tr></thead>"
+        "<tbody>"
+        + "".join(table_rows)
+        + "</tbody></table>",
+        unsafe_allow_html=True,
+    )
+
+
 def _render_limitations(limitations: list[str]) -> None:
     if limitations:
         _render_list("Limitations", limitations)
@@ -1561,6 +1599,7 @@ def _build_technology_report_markdown(report: dict[str, Any]) -> str:
         f"Confidence: **{str(report.get('confidence', 'low')).title()}**",
         "",
     ]
+    lines.extend(_markdown_risk_heatmap(report.get("risk_heatmap", [])))
     lines.extend(_markdown_list("Top 5 Risks", report.get("top_5_risks", [])))
     lines.extend(["## Findings", ""])
     for finding in report.get("findings", []):
@@ -1613,6 +1652,7 @@ def _build_hundred_day_plan_markdown(plan: dict[str, Any]) -> str:
         "",
     ]
     lines.extend(_markdown_plan_at_a_glance(plan.get("plan_at_a_glance", [])))
+    lines.extend(_markdown_risk_heatmap(plan.get("risk_heatmap", [])))
     if plan.get("quick_wins"):
         lines.extend(_markdown_list("Quick Wins", plan.get("quick_wins", [])))
     lines.extend(_markdown_plan_actions("Days 1-30", plan.get("days_1_30", [])))
@@ -1648,6 +1688,7 @@ def _build_hundred_day_one_pager_markdown(plan: dict[str, Any]) -> str:
         "",
     ]
     lines.extend(_markdown_list("Top 5 Priorities", one_pager.get("top_5_priorities", [])))
+    lines.extend(_markdown_risk_heatmap(plan.get("risk_heatmap", [])))
     lines.extend(_markdown_list("First 30 Days", one_pager.get("first_30_days", [])))
     lines.extend(_markdown_list("Days 31-60", one_pager.get("days_31_60", [])))
     lines.extend(_markdown_list("Days 61-90", one_pager.get("days_61_90", [])))
@@ -1677,6 +1718,34 @@ def _markdown_plan_at_a_glance(rows: list[dict[str, Any]]) -> list[str]:
                     row.get("key_actions", ""),
                     row.get("success_measures", ""),
                     row.get("risk_reduced", ""),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def _markdown_risk_heatmap(rows: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "## Executive Risk Heatmap",
+        "",
+        "| Category | Risk Rating | Confidence | Evidence Count | Primary Recommended Action |",
+        "| --- | --- | --- | ---: | --- |",
+    ]
+    if not rows:
+        lines.extend(["| None provided. |  |  | 0 |  |", ""])
+        return lines
+    for row in rows:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _format_summary_type(str(row.get("category", ""))),
+                    str(row.get("risk_rating", "")).title(),
+                    str(row.get("confidence", "")).title(),
+                    str(row.get("evidence_count", 0)),
+                    str(row.get("primary_recommended_action", "")).replace("|", "\\|"),
                 ]
             )
             + " |"

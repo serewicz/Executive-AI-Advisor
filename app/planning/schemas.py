@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.advisor.schemas import Citation
+from app.diligence.schemas import RiskHeatmapRow
 
 
 PlanType = Literal["growth_equity", "acquisition_integration", "turnaround"]
@@ -61,6 +62,7 @@ class HundredDayPlanResponse(BaseModel):
     overall_priority: PlanPriority
     executive_summary: str
     executive_one_pager: ExecutiveOnePager
+    risk_heatmap: list[RiskHeatmapRow]
     plan_at_a_glance: list[PlanAtAGlanceRow]
     quick_wins: list[str] = []
     days_1_30: list[HundredDayPlanAction]
