@@ -538,6 +538,7 @@ def _render_technology_report(report: dict[str, Any]) -> None:
         data=markdown,
         file_name="Technology Due Diligence Report.md",
         mime="text/markdown",
+        key=f"download_report_inline_{report.get('report_type', 'technology_due_diligence')}_{report.get('document_set_id', 'unknown')}",
         use_container_width=True,
     )
 
@@ -701,6 +702,7 @@ def _render_evaluation_section() -> None:
         data=report,
         file_name="Evaluation Report.md",
         mime="text/markdown",
+        key=f"download_evaluation_report_markdown_{response.get('evaluation_run_id', 'latest')}",
         use_container_width=True,
     )
 
@@ -743,6 +745,7 @@ def _render_export_section() -> None:
             data=markdown,
             file_name="Board Memo.md",
             mime="text/markdown",
+            key=f"download_board_summary_markdown_{board_summary.get('summary_type', 'board')}_{board_summary.get('document_set_id') or board_summary.get('document_id') or 'latest'}",
             use_container_width=True,
         )
         with st.expander("Board memo Markdown preview"):
@@ -755,6 +758,7 @@ def _render_export_section() -> None:
             data=report_markdown,
             file_name="Technology Due Diligence Report.md",
             mime="text/markdown",
+            key=f"download_technology_diligence_markdown_{technology_report.get('report_type', 'technology_due_diligence')}_{technology_report.get('document_set_id', 'unknown')}",
             use_container_width=True,
         )
         with st.expander("Technology diligence Markdown preview"):
