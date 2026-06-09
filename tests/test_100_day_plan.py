@@ -11,7 +11,7 @@ from app.diligence.schemas import (
 )
 from app.main import app
 from app.planning.service import generate_100_day_plan
-from ui.streamlit_app import _build_hundred_day_plan_markdown
+from ui.streamlit_app import _build_hundred_day_one_pager_markdown, _build_hundred_day_plan_markdown
 
 
 class FakeSession:
@@ -102,6 +102,8 @@ def test_100_day_plan_endpoint_works(monkeypatch):
     assert body["document_set_id"] == str(document_set_id)
     assert body["plan_type"] == "growth_equity"
     assert body["overall_priority"] == "high"
+    assert body["executive_one_pager"]["executive_summary"]
+    assert body["executive_one_pager"]["top_5_priorities"]
     assert body["plan_at_a_glance"]
     assert body["days_1_30"]
     assert body["days_31_60"]
@@ -343,6 +345,55 @@ def test_plan_at_a_glance_and_board_checkpoints_are_structured(monkeypatch):
     assert all(checkpoint.decision_needed for checkpoint in plan.board_checkpoints)
 
 
+def test_executive_one_pager_exists_for_all_plan_types(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    for plan_type in ["growth_equity", "acquisition_integration", "turnaround"]:
+        plan = generate_100_day_plan(
+            document_set_id=document_set_id,
+            plan_type=plan_type,
+            db=FakeSession(),
+        )
+
+        one_pager = plan.executive_one_pager
+        assert one_pager.executive_summary
+        assert one_pager.current_state
+        assert one_pager.target_state
+        assert one_pager.overall_risk
+        assert one_pager.top_5_priorities
+        assert one_pager.first_30_days
+        assert one_pager.days_31_60
+        assert one_pager.days_61_90
+        assert one_pager.board_decisions_required
+        assert one_pager.success_metrics
+        assert one_pager.key_dependencies
+
+
+def test_executive_one_pager_is_concise_and_board_readable(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="growth_equity",
+        db=FakeSession(),
+    )
+
+    one_pager = plan.executive_one_pager
+
+    assert len(one_pager.executive_summary) <= 520
+    assert len(one_pager.top_5_priorities) <= 5
+    assert len(one_pager.first_30_days) <= 5
+    assert "Current" not in one_pager.executive_summary
+
+
 def test_100_day_plan_markdown_export_works(monkeypatch):
     document_set_id = uuid4()
     monkeypatch.setattr(
@@ -368,6 +419,34 @@ def test_100_day_plan_markdown_export_works(monkeypatch):
     assert "## Board Checkpoints" in markdown
     assert "## Dependencies" in markdown
     assert "## Limitations" in markdown
+
+
+def test_100_day_plan_one_pager_markdown_export_works(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="turnaround",
+        db=FakeSession(),
+    )
+
+    markdown = _build_hundred_day_one_pager_markdown(plan.model_dump(mode="json"))
+
+    assert "# Executive One-Pager: 100-Day Technology Plan" in markdown
+    assert "## Executive Summary" in markdown
+    assert "## Current State" in markdown
+    assert "## Target State" in markdown
+    assert "## Overall Risk" in markdown
+    assert "## Top 5 Priorities" in markdown
+    assert "## First 30 Days" in markdown
+    assert "## Days 31-60" in markdown
+    assert "## Days 61-90" in markdown
+    assert "## Board Decisions Required" in markdown
+    assert "## Success Metrics" in markdown
+    assert "## Key Dependencies" in markdown
 
 
 def test_100_day_plan_markdown_includes_quick_wins_for_turnaround(monkeypatch):

@@ -6,6 +6,7 @@ from app.diligence.service import generate_technology_due_diligence_report
 from app.planning.prompts import PLAN_TYPE_OUTCOMES, PLAN_TYPE_SUMMARY, SCENARIO_ACTIONS
 from app.planning.schemas import (
     BoardCheckpoint,
+    ExecutiveOnePager,
     HundredDayPlanAction,
     HundredDayPlanResponse,
     PlanAtAGlanceRow,
@@ -43,21 +44,38 @@ def generate_100_day_plan(
         *[_action_from_finding(finding, plan_type, "low") for finding in green_findings],
     ]
     days_91_100 = _scenario_actions(plan_type, "days_91_100", "medium", report.findings)
+    overall_priority = _overall_priority(report.overall_risk_rating)
+    executive_summary = _executive_summary(plan_type, report.overall_risk_rating)
+    success_metrics = _success_metrics(plan_type, report.findings)
+    board_checkpoints = _board_checkpoints(plan_type)
+    dependencies = _dependencies(plan_type, report.findings)
 
     return HundredDayPlanResponse(
         document_set_id=report.document_set_id,
         plan_type=plan_type,
-        overall_priority=_overall_priority(report.overall_risk_rating),
-        executive_summary=_executive_summary(plan_type, report.overall_risk_rating),
+        overall_priority=overall_priority,
+        executive_summary=executive_summary,
+        executive_one_pager=_executive_one_pager(
+            plan_type=plan_type,
+            overall_risk_rating=report.overall_risk_rating,
+            executive_summary=executive_summary,
+            findings=report.findings,
+            days_1_30=days_1_30,
+            days_31_60=days_31_60,
+            days_61_90=days_61_90,
+            board_checkpoints=board_checkpoints,
+            success_metrics=success_metrics,
+            dependencies=dependencies,
+        ),
         plan_at_a_glance=_plan_at_a_glance(plan_type),
         quick_wins=_quick_wins(plan_type),
         days_1_30=days_1_30,
         days_31_60=days_31_60,
         days_61_90=days_61_90,
         days_91_100=days_91_100,
-        success_metrics=_success_metrics(plan_type, report.findings),
-        board_checkpoints=_board_checkpoints(plan_type),
-        dependencies=_dependencies(plan_type, report.findings),
+        success_metrics=success_metrics,
+        board_checkpoints=board_checkpoints,
+        dependencies=dependencies,
         limitations=_limitations(plan_type),
     )
 
@@ -334,6 +352,113 @@ def _plan_at_a_glance(plan_type: PlanType) -> list[PlanAtAGlanceRow]:
         )
         for timeframe, objective, actions, measures, risk in rows[plan_type]
     ]
+
+
+def _executive_one_pager(
+    plan_type: PlanType,
+    overall_risk_rating: str,
+    executive_summary: str,
+    findings,
+    days_1_30: list[HundredDayPlanAction],
+    days_31_60: list[HundredDayPlanAction],
+    days_61_90: list[HundredDayPlanAction],
+    board_checkpoints: list[BoardCheckpoint],
+    success_metrics: list[str],
+    dependencies: list[str],
+) -> ExecutiveOnePager:
+    red_count = sum(1 for finding in findings if finding.risk_rating == "red")
+    yellow_count = sum(1 for finding in findings if finding.risk_rating == "yellow")
+    green_count = sum(1 for finding in findings if finding.risk_rating == "green")
+    top_findings = sorted(findings, key=_finding_priority_rank)[:5]
+    top_priorities = [
+        f"{finding.title}: {finding.recommended_action}"
+        for finding in top_findings
+    ] or _action_summaries(days_1_30, limit=5)
+
+    return ExecutiveOnePager(
+        executive_summary=_concise(executive_summary, max_chars=520),
+        current_state=_current_state_summary(
+            plan_type=plan_type,
+            overall_risk_rating=overall_risk_rating,
+            red_count=red_count,
+            yellow_count=yellow_count,
+            green_count=green_count,
+            top_findings=top_findings,
+        ),
+        target_state=_target_state_summary(plan_type),
+        overall_risk=(
+            f"{overall_risk_rating.title()} risk. "
+            f"Findings mix: {red_count} red, {yellow_count} yellow, {green_count} green."
+        ),
+        top_5_priorities=top_priorities[:5],
+        first_30_days=_action_summaries(days_1_30, limit=5),
+        days_31_60=_action_summaries(days_31_60, limit=5),
+        days_61_90=_action_summaries(days_61_90, limit=5),
+        board_decisions_required=[
+            checkpoint.decision_needed
+            for checkpoint in board_checkpoints
+            if checkpoint.decision_needed
+        ][:4],
+        success_metrics=success_metrics[:6],
+        key_dependencies=dependencies[:6],
+    )
+
+
+def _current_state_summary(
+    plan_type: PlanType,
+    overall_risk_rating: str,
+    red_count: int,
+    yellow_count: int,
+    green_count: int,
+    top_findings,
+) -> str:
+    if top_findings:
+        highest_risk = top_findings[0].title
+        evidence = top_findings[0].evidence_summary.rstrip(".")
+        return (
+            f"The investigation is currently rated {overall_risk_rating} with {red_count} red, "
+            f"{yellow_count} yellow, and {green_count} green findings. The highest-priority issue is "
+            f"{highest_risk}, supported by evidence that {evidence}."
+        )
+    plan_label = plan_type.replace("_", " ")
+    return f"The {plan_label} plan starts from a limited diligence record with no specific findings returned."
+
+
+def _target_state_summary(plan_type: PlanType) -> str:
+    targets = {
+        "growth_equity": (
+            "By Day 100, leadership should have measurable delivery, reliability, security, cost, and capacity "
+            "controls that can support a higher-growth operating cadence."
+        ),
+        "acquisition_integration": (
+            "By Day 100, acquirer and target teams should have named owners, rehearsed handoffs, documented "
+            "runbooks, and a visible blocker register for post-close execution."
+        ),
+        "turnaround": (
+            "By Day 100, urgent operating risk should be contained, spend controls should be active, production "
+            "ownership should be clear, and residual risks should be ready for board decision."
+        ),
+    }
+    return targets[plan_type]
+
+
+def _finding_priority_rank(finding) -> tuple[int, str]:
+    risk_rank = {"red": 0, "yellow": 1, "green": 2}
+    return (risk_rank.get(finding.risk_rating, 3), finding.title)
+
+
+def _action_summaries(actions: list[HundredDayPlanAction], limit: int) -> list[str]:
+    return [
+        f"{action.action} ({action.owner}; {action.success_metric})"
+        for action in actions[:limit]
+    ]
+
+
+def _concise(value: str, max_chars: int) -> str:
+    if len(value) <= max_chars:
+        return value
+    trimmed = value[: max_chars - 1].rsplit(" ", 1)[0].rstrip(".,;")
+    return f"{trimmed}."
 
 
 def _quick_wins(plan_type: PlanType) -> list[str]:

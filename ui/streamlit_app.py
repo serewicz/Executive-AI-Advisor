@@ -655,6 +655,14 @@ def _render_hundred_day_plan(plan: dict[str, Any]) -> None:
     col1.metric("Plan Type", _format_summary_type(plan.get("plan_type", "")))
     col2.metric("Overall Priority", str(plan.get("overall_priority", "unknown")).title())
 
+    one_pager_tab, full_plan_tab = st.tabs(["Executive One-Pager", "Full 100-Day Plan"])
+    with one_pager_tab:
+        _render_hundred_day_one_pager(plan)
+    with full_plan_tab:
+        _render_full_hundred_day_plan(plan)
+
+
+def _render_full_hundred_day_plan(plan: dict[str, Any]) -> None:
     st.markdown("#### Executive Summary")
     st.markdown(plan.get("executive_summary", "No executive summary returned."))
 
@@ -677,6 +685,45 @@ def _render_hundred_day_plan(plan: dict[str, Any]) -> None:
         file_name="100-Day Technology Plan.md",
         mime="text/markdown",
         key=f"download_hundred_day_plan_markdown_{plan.get('plan_type', 'plan')}_{plan.get('document_set_id', 'unknown')}",
+        use_container_width=True,
+    )
+
+
+def _render_hundred_day_one_pager(plan: dict[str, Any]) -> None:
+    one_pager = plan.get("executive_one_pager") or {}
+    if not one_pager:
+        st.info("No executive one-pager returned.")
+        return
+
+    st.markdown("#### Executive Summary")
+    st.markdown(one_pager.get("executive_summary", "No executive summary returned."))
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("#### Current State")
+        st.markdown(one_pager.get("current_state", "Not provided."))
+    with col2:
+        st.markdown("#### Target State")
+        st.markdown(one_pager.get("target_state", "Not provided."))
+
+    st.markdown("#### Overall Risk")
+    st.markdown(one_pager.get("overall_risk", "Not provided."))
+
+    _render_list("Top 5 Priorities", one_pager.get("top_5_priorities", []))
+    _render_list("First 30 Days", one_pager.get("first_30_days", []))
+    _render_list("Days 31-60", one_pager.get("days_31_60", []))
+    _render_list("Days 61-90", one_pager.get("days_61_90", []))
+    _render_list("Board Decisions Required", one_pager.get("board_decisions_required", []))
+    _render_list("Success Metrics", one_pager.get("success_metrics", []))
+    _render_list("Key Dependencies", one_pager.get("key_dependencies", []))
+
+    markdown = _build_hundred_day_one_pager_markdown(plan)
+    st.download_button(
+        label="Download Executive One-Pager.md",
+        data=markdown,
+        file_name="Executive One-Pager.md",
+        mime="text/markdown",
+        key=f"download_hundred_day_one_pager_markdown_{plan.get('plan_type', 'plan')}_{plan.get('document_set_id', 'unknown')}",
         use_container_width=True,
     )
 
@@ -1576,6 +1623,37 @@ def _build_hundred_day_plan_markdown(plan: dict[str, Any]) -> str:
     lines.extend(_markdown_board_checkpoints(plan.get("board_checkpoints", [])))
     lines.extend(_markdown_list("Dependencies", plan.get("dependencies", [])))
     lines.extend(_markdown_list("Limitations", plan.get("limitations", [])))
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_hundred_day_one_pager_markdown(plan: dict[str, Any]) -> str:
+    one_pager = plan.get("executive_one_pager") or {}
+    lines = [
+        "# Executive One-Pager: 100-Day Technology Plan",
+        "",
+        f"Investigation ID: `{plan.get('document_set_id', '')}`",
+        f"Plan Type: `{plan.get('plan_type', '')}`",
+        "",
+        "## Executive Summary",
+        one_pager.get("executive_summary", ""),
+        "",
+        "## Current State",
+        one_pager.get("current_state", ""),
+        "",
+        "## Target State",
+        one_pager.get("target_state", ""),
+        "",
+        "## Overall Risk",
+        one_pager.get("overall_risk", ""),
+        "",
+    ]
+    lines.extend(_markdown_list("Top 5 Priorities", one_pager.get("top_5_priorities", [])))
+    lines.extend(_markdown_list("First 30 Days", one_pager.get("first_30_days", [])))
+    lines.extend(_markdown_list("Days 31-60", one_pager.get("days_31_60", [])))
+    lines.extend(_markdown_list("Days 61-90", one_pager.get("days_61_90", [])))
+    lines.extend(_markdown_list("Board Decisions Required", one_pager.get("board_decisions_required", [])))
+    lines.extend(_markdown_list("Success Metrics", one_pager.get("success_metrics", [])))
+    lines.extend(_markdown_list("Key Dependencies", one_pager.get("key_dependencies", [])))
     return "\n".join(lines).strip() + "\n"
 
 

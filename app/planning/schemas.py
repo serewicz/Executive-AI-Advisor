@@ -41,11 +41,26 @@ class BoardCheckpoint(BaseModel):
     decision_needed: str | None = None
 
 
+class ExecutiveOnePager(BaseModel):
+    executive_summary: str
+    current_state: str
+    target_state: str
+    overall_risk: str
+    top_5_priorities: list[str]
+    first_30_days: list[str]
+    days_31_60: list[str]
+    days_61_90: list[str]
+    board_decisions_required: list[str]
+    success_metrics: list[str]
+    key_dependencies: list[str]
+
+
 class HundredDayPlanResponse(BaseModel):
     document_set_id: UUID
     plan_type: PlanType
     overall_priority: PlanPriority
     executive_summary: str
+    executive_one_pager: ExecutiveOnePager
     plan_at_a_glance: list[PlanAtAGlanceRow]
     quick_wins: list[str] = []
     days_1_30: list[HundredDayPlanAction]
