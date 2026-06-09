@@ -7,8 +7,11 @@ from ui.streamlit_app import (
     _evaluation_questions_from_text,
     _evaluation_questions_to_text,
     _evaluation_ready_documents,
+    _risk_counts,
     _remove_document_from_local_state,
     _sync_active_document_set_state,
+    render_confidence_badge,
+    render_risk_badge,
 )
 
 
@@ -171,3 +174,26 @@ def test_evaluation_missing_requirements_reports_exact_blockers():
     assert "Select or create an investigation." in missing
     assert "Upload and process at least one document." in missing
     assert "Enter at least one evaluation question." in missing
+
+
+def test_risk_and_confidence_badges_render_executive_labels():
+    assert "Risk: Red" in render_risk_badge("red")
+    assert "Risk: Yellow" in render_risk_badge("yellow")
+    assert "Risk: Green" in render_risk_badge("green")
+    assert "High Confidence" in render_confidence_badge("high")
+    assert "Medium Confidence" in render_confidence_badge("medium")
+    assert "Low Confidence" in render_confidence_badge("low")
+
+
+def test_risk_counts_summarize_findings():
+    counts = _risk_counts(
+        [
+            {"risk_rating": "red"},
+            {"risk_rating": "yellow"},
+            {"risk_rating": "yellow"},
+            {"risk_rating": "green"},
+            {"risk_rating": "unknown"},
+        ]
+    )
+
+    assert counts == {"red": 1, "yellow": 2, "green": 1}

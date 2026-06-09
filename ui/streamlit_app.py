@@ -518,13 +518,32 @@ def _render_technology_report_section() -> None:
 
 def _render_technology_report(report: dict[str, Any]) -> None:
     st.subheader("Technology Due Diligence Report")
+    findings = report.get("findings", [])
+    risk_counts = _risk_counts(findings)
+
+    metric_cols = st.columns(6)
+    metric_cols[0].metric("Overall Risk", str(report.get("overall_risk_rating", "unknown")).title())
+    metric_cols[1].metric("Confidence", f"{str(report.get('confidence', 'low')).title()}")
+    metric_cols[2].metric("Total Findings", len(findings))
+    metric_cols[3].metric("Red Findings", risk_counts["red"])
+    metric_cols[4].metric("Yellow Findings", risk_counts["yellow"])
+    metric_cols[5].metric("Green Findings", risk_counts["green"])
+
+    st.markdown(
+        " ".join(
+            [
+                render_risk_badge(str(report.get("overall_risk_rating", "green"))),
+                render_confidence_badge(str(report.get("confidence", "low"))),
+            ]
+        ),
+        unsafe_allow_html=True,
+    )
+
     st.markdown("#### Executive Summary")
     st.markdown(report.get("executive_summary", "No executive summary returned."))
-    st.metric("Overall Risk Rating", str(report.get("overall_risk_rating", "unknown")).title())
-    _render_confidence(report.get("confidence", "low"))
 
     _render_list("Top 5 Risks", report.get("top_5_risks", []))
-    _render_technology_findings(report.get("findings", []))
+    _render_technology_findings(findings)
     _render_list("Management Questions", report.get("management_questions", []))
     _render_list("Board Discussion Points", report.get("board_discussion_points", []))
     _render_list("Recommended Actions", report.get("recommended_actions", []))
@@ -551,10 +570,16 @@ def _render_technology_findings(findings: list[dict[str, Any]]) -> None:
 
     for finding in findings:
         st.markdown(f"##### {_format_summary_type(finding.get('category', 'finding'))}")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Risk", str(finding.get("risk_rating", "unknown")).title())
-        col2.metric("Confidence", str(finding.get("confidence", "unknown")).title())
-        col3.metric("Owner", finding.get("recommended_owner", "Unassigned"))
+        st.markdown(
+            " ".join(
+                [
+                    render_risk_badge(str(finding.get("risk_rating", "green"))),
+                    render_confidence_badge(str(finding.get("confidence", "low"))),
+                ]
+            ),
+            unsafe_allow_html=True,
+        )
+        st.caption(f"Recommended owner: {finding.get('recommended_owner', 'Unassigned')}")
         st.markdown(f"**{finding.get('title', '')}**")
         st.markdown(f"**Business impact:** {finding.get('business_impact', '')}")
         st.markdown(f"**Evidence:** {finding.get('evidence_summary', '')}")
@@ -1104,6 +1129,45 @@ def _render_confidence(confidence: str) -> None:
         f'<span class="confidence confidence-{normalized}">Confidence: {normalized.title()}</span>',
         unsafe_allow_html=True,
     )
+
+
+def render_risk_badge(risk_rating: str) -> str:
+    normalized = risk_rating.strip().lower()
+    styles = {
+        "red": ("Red", "#fdecec", "#b42318", "#f5a6a0"),
+        "yellow": ("Yellow", "#fff7e6", "#8a4b00", "#f2c36b"),
+        "green": ("Green", "#eaf7ef", "#17663a", "#8ccfa5"),
+    }
+    label, background, color, border = styles.get(normalized, styles["green"])
+    return (
+        f'<span style="display:inline-block;padding:0.25rem 0.6rem;border-radius:0.35rem;'
+        f'font-size:0.82rem;font-weight:650;background:{background};color:{color};'
+        f'border:1px solid {border};">Risk: {label}</span>'
+    )
+
+
+def render_confidence_badge(confidence: str) -> str:
+    normalized = confidence.strip().lower()
+    styles = {
+        "high": ("High Confidence", "#e8f5ee", "#145a32", "#8ccfa5"),
+        "medium": ("Medium Confidence", "#fff6df", "#7a4b00", "#f2c36b"),
+        "low": ("Low Confidence", "#fbeaea", "#8a1f1f", "#f5a6a0"),
+    }
+    label, background, color, border = styles.get(normalized, styles["low"])
+    return (
+        f'<span style="display:inline-block;padding:0.25rem 0.6rem;border-radius:0.35rem;'
+        f'font-size:0.82rem;font-weight:650;background:{background};color:{color};'
+        f'border:1px solid {border};">{label}</span>'
+    )
+
+
+def _risk_counts(findings: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"red": 0, "yellow": 0, "green": 0}
+    for finding in findings:
+        risk_rating = str(finding.get("risk_rating", "")).lower()
+        if risk_rating in counts:
+            counts[risk_rating] += 1
+    return counts
 
 
 def _render_limitations(limitations: list[str]) -> None:
