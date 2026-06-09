@@ -1,6 +1,6 @@
 # Architecture
 
-Executive AI Advisor is a FastAPI, PostgreSQL, pgvector, and Streamlit application for turning executive documents into cited answers, board-level summaries, and evaluation records.
+Executive AI Advisor is a FastAPI, PostgreSQL, pgvector, and Streamlit application for turning executive documents into cited answers, board-level summaries, technology due diligence reports, and evaluation records.
 
 ## System Overview
 
@@ -27,7 +27,7 @@ flowchart LR
     Advisor --> LLM["Mock or OpenAI LLM provider"]
     Advisor --> Answers["Cited Q&A and board memos"]
     Search --> Diligence["Diligence service"]
-    Diligence --> Assessments["Technology diligence assessments"]
+    Diligence --> Assessments["Technology diligence assessments and reports"]
     Answers --> Evaluation["Evaluation service"]
     Evaluation --> DB
 ```
@@ -44,7 +44,8 @@ flowchart LR
 8. Cited Q&A: retrieved chunks are labeled as sources and passed to the advisor service.
 9. Board memo generation: board summary prompts create structured memo sections using retrieved chunks only.
 10. Technology diligence: the diligence service scores architecture, security, technical debt, key person risk, and AI readiness using retrieved evidence.
-11. Evaluation: advisor answers are scored for citation quality, groundedness, relevance, and executive usefulness.
+11. Technology due diligence report: targeted category retrieval across the active document set produces red/yellow/green findings, management questions, board discussion points, actions, and citations.
+12. Evaluation: advisor answers are scored for citation quality, groundedness, relevance, and executive usefulness.
 
 ## Core Components
 
@@ -57,7 +58,7 @@ flowchart LR
 - Embedding providers: local embeddings by default, OpenAI embeddings optionally.
 - LLM providers: mock provider by default, OpenAI chat provider optionally.
 - Advisor service: cited Q&A and board memo generation.
-- Diligence service: technology due diligence assessments with scores, risks, recommendations, and citations.
+- Diligence service: technology due diligence assessments and investigation-scoped reports with scores, risk ratings, recommendations, and citations.
 - Evaluation service: deterministic scoring and persistent evaluation runs.
 
 ## Provider Strategy
@@ -94,6 +95,7 @@ Core tables:
 - `documents`: document metadata, lifecycle status, governance classification, source type, file path, and metadata.
 - `parsed_document_pages`: page-aware parsed text.
 - `document_chunks`: retrieval chunks, page ranges, token counts, metadata, and embeddings.
+- `document_sets` and `document_set_documents`: investigation workspaces and document associations.
 - `evaluation_runs`: evaluation questions, scored results, average score, and timestamp.
 
 Docker Compose uses `pgvector/pgvector:pg16`. The database init script enables the `vector` extension, and Alembic applies schema migrations at container startup.
@@ -124,6 +126,18 @@ Retrieved chunks are assigned labels such as `[S1]`, `[S2]`, and `[S3]`. Advisor
 - excerpt
 
 This makes generated output inspectable without requiring a user to read raw JSON or trust an uncited answer.
+
+## Technology Due Diligence Reports
+
+Technology due diligence reports are generated for a selected document set, not globally. The service runs targeted retrieval queries for architecture, security, technical debt, engineering organization, key person risk, AI readiness, cloud cost, and integration readiness. Low-value chunks are filtered and citations use relevant excerpts rather than full chunks by default.
+
+Risk ratings are deterministic directional indicators:
+
+- `red`: material risk with stronger evidence or business impact.
+- `yellow`: moderate risk requiring validation, remediation, or monitoring.
+- `green`: limited evidence of concern or adequate controls based on retrieved material.
+
+Confidence is based on the quantity and spread of retrieved evidence. Reports include limitations because retrieval may miss evidence, source documents may be incomplete, and generated outputs do not replace management interviews, technical walkthroughs, security testing, legal advice, financial advice, or investment advice.
 
 ## Security And Governance Hooks
 

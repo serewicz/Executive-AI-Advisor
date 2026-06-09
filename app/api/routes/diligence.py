@@ -2,11 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.dependencies import get_db
-from app.diligence.schemas import DiligenceAnalyzeRequest, DiligenceAssessmentResponse
+from app.diligence.schemas import (
+    DiligenceAnalyzeRequest,
+    DiligenceAssessmentResponse,
+    TechnologyDiligenceReport,
+    TechnologyDiligenceRequest,
+)
 from app.diligence.service import (
+    DiligenceDocumentSetNotFoundError,
     DiligenceDocumentNotFoundError,
     DiligenceValidationError,
     analyze_document,
+    generate_technology_due_diligence_report,
 )
 
 
@@ -26,6 +33,26 @@ def analyze_diligence(
             db=db,
         )
     except DiligenceDocumentNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except DiligenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.post("/technology-report", response_model=TechnologyDiligenceReport)
+def generate_technology_report(
+    request: TechnologyDiligenceRequest,
+    db: Session = Depends(get_db),
+) -> TechnologyDiligenceReport:
+    try:
+        return generate_technology_due_diligence_report(
+            document_set_id=request.document_set_id,
+            top_k=request.top_k,
+            include_100_day_plan=request.include_100_day_plan,
+            db=db,
+        )
+    except DiligenceDocumentSetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except DiligenceValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

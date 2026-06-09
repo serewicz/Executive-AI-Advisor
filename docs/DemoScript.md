@@ -132,7 +132,23 @@ Retrieval and generation are separated. The system first retrieves relevant evid
 
 Leave Search across all documents unchecked for investigation-scoped Q&A. Turn it on only when demonstrating global retrieval across multiple uploaded documents.
 
-### 4. Generate Board Summary
+### 4. Generate Technology Due Diligence Report
+
+Click Generate Technology Due Diligence Report for the active investigation.
+
+Talking point:
+
+The report is not a chatbot answer. It is a structured diligence artifact scoped to the selected company workspace. It retrieves evidence by category, assigns red/yellow/green risk ratings, shows confidence, identifies recommended owners, and produces management questions, board discussion points, and a 30/60/90-day plan.
+
+Explain the ratings:
+
+- Red means material risk with stronger evidence or business impact.
+- Yellow means manageable risk that needs validation or monitoring.
+- Green means limited evidence of concern based on retrieved documents.
+
+Good input packets include executive summary, technology assessment, security assessment, engineering organization review, AI readiness assessment, roadmap, cloud cost analysis, and integration readiness materials.
+
+### 5. Generate Board Summary
 
 Choose a summary type such as:
 
@@ -146,7 +162,7 @@ Talking point:
 
 The board memo is structured for executive review: summary, risks, evidence, board questions, recommended actions, limitations, confidence, and citations.
 
-### 5. Inspect Citations
+### 6. Inspect Citations
 
 Open the citation cards.
 
@@ -156,7 +172,7 @@ Every material claim should be reviewable against source excerpts and page range
 
 Citations show metadata first, concise relevant excerpts second, and full source text only when the user asks to inspect it.
 
-### 6. Run Evaluation
+### 7. Run Evaluation
 
 Open the Evaluation section and click Run Evaluation.
 
@@ -164,9 +180,9 @@ Talking point:
 
 Evaluation is currently single-document. It is part of trust, not an afterthought. The system scores citation quality, groundedness, relevance, and executive usefulness.
 
-### 7. Export Markdown Memo
+### 8. Export Markdown Memo
 
-Use Download Board Memo.md or Download Evaluation Report.md.
+Use Download Board Memo.md, Download Technology Due Diligence Report.md, or Download Evaluation Report.md.
 
 Talking point:
 

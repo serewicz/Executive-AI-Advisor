@@ -36,6 +36,7 @@ LOCAL_UI_STATE_KEYS = [
     "document_status",
     "qa_response",
     "board_summary",
+    "technology_report",
     "evaluation_response",
     "evaluation_questions_text",
     "evaluation_questions_initialized",
@@ -65,6 +66,8 @@ def main() -> None:
         _render_board_summary_section()
 
     st.divider()
+    _render_technology_report_section()
+    st.divider()
     _render_evaluation_section()
     st.divider()
     _render_evidence_section()
@@ -85,6 +88,7 @@ def _initialize_state() -> None:
         "selected_documents": [],
         "qa_response": None,
         "board_summary": None,
+        "technology_report": None,
         "evaluation_response": None,
         "evaluation_questions_text": "",
         "evaluation_questions_initialized": False,
@@ -274,6 +278,7 @@ def _render_upload_section() -> None:
                 st.session_state.document_status = response.get("status", "uploaded")
         st.session_state.qa_response = None
         st.session_state.board_summary = None
+        st.session_state.technology_report = None
         st.session_state.evaluation_response = None
         if uploaded_count:
             detail = _load_active_document_set_detail()
@@ -470,6 +475,108 @@ def _render_board_memo(response: dict[str, Any]) -> None:
     _render_citations(response.get("citations", []), title="Board Summary Citations")
 
 
+def _render_technology_report_section() -> None:
+    st.header("Technology Due Diligence Report")
+    st.markdown(
+        '<div class="section-note">Generate a structured board-quality report for the active investigation workspace.</div>',
+        unsafe_allow_html=True,
+    )
+
+    document_set_id = st.session_state.active_document_set_id
+    if document_set_id:
+        st.caption(f"Scoped to active investigation: {st.session_state.active_document_set_name}")
+    else:
+        st.info("Select or create an investigation before generating a technology due diligence report.")
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        top_k = st.slider("Evidence budget", min_value=5, max_value=40, value=20, key="technology_report_top_k")
+    with col2:
+        include_plan = st.checkbox("Include 30/60/90-day plan", value=True, key="technology_report_plan")
+
+    if st.button(
+        "Generate Technology Due Diligence Report",
+        disabled=not document_set_id,
+        use_container_width=True,
+    ):
+        with st.spinner("Retrieving evidence and generating technology diligence report"):
+            response = _post_json(
+                "/diligence/technology-report",
+                {
+                    "document_set_id": document_set_id,
+                    "top_k": top_k,
+                    "include_100_day_plan": include_plan,
+                },
+            )
+        if response:
+            st.session_state.technology_report = response
+
+    report = st.session_state.technology_report
+    if report:
+        _render_technology_report(report)
+
+
+def _render_technology_report(report: dict[str, Any]) -> None:
+    st.subheader("Technology Due Diligence Report")
+    st.markdown("#### Executive Summary")
+    st.markdown(report.get("executive_summary", "No executive summary returned."))
+    st.metric("Overall Risk Rating", str(report.get("overall_risk_rating", "unknown")).title())
+    _render_confidence(report.get("confidence", "low"))
+
+    _render_list("Top 5 Risks", report.get("top_5_risks", []))
+    _render_technology_findings(report.get("findings", []))
+    _render_list("Management Questions", report.get("management_questions", []))
+    _render_list("Board Discussion Points", report.get("board_discussion_points", []))
+    _render_list("Recommended Actions", report.get("recommended_actions", []))
+    _render_technology_plan(report.get("thirty_sixty_ninety_day_plan", {}))
+    _render_limitations(report.get("limitations", []))
+    _render_citations(report.get("citations", []), title="Report Citations")
+
+    markdown = _build_technology_report_markdown(report)
+    st.download_button(
+        label="Download Technology Due Diligence Report.md",
+        data=markdown,
+        file_name="Technology Due Diligence Report.md",
+        mime="text/markdown",
+        use_container_width=True,
+    )
+
+
+def _render_technology_findings(findings: list[dict[str, Any]]) -> None:
+    st.markdown("#### Findings")
+    if not findings:
+        st.markdown("No findings returned.")
+        return
+
+    for finding in findings:
+        st.markdown(f"##### {_format_summary_type(finding.get('category', 'finding'))}")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Risk", str(finding.get("risk_rating", "unknown")).title())
+        col2.metric("Confidence", str(finding.get("confidence", "unknown")).title())
+        col3.metric("Owner", finding.get("recommended_owner", "Unassigned"))
+        st.markdown(f"**{finding.get('title', '')}**")
+        st.markdown(f"**Business impact:** {finding.get('business_impact', '')}")
+        st.markdown(f"**Evidence:** {finding.get('evidence_summary', '')}")
+        st.markdown(f"**Recommended action:** {finding.get('recommended_action', '')}")
+        _render_citations(
+            finding.get("citations", []),
+            title=f"{_format_summary_type(finding.get('category', 'finding'))} Evidence",
+            use_expanders=False,
+        )
+        st.divider()
+
+
+def _render_technology_plan(plan: dict[str, list[str]]) -> None:
+    st.markdown("#### 30/60/90-Day Plan")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        _render_list("Days 1-30", plan.get("days_1_30", []))
+    with col2:
+        _render_list("Days 31-60", plan.get("days_31_60", []))
+    with col3:
+        _render_list("Days 61-90", plan.get("days_61_90", []))
+
+
 def _render_evaluation_section() -> None:
     st.header("Evaluation")
     st.markdown(
@@ -601,15 +708,18 @@ def _render_evaluation_section() -> None:
 def _render_evidence_section() -> None:
     st.header("Citations / Evidence")
     board_summary = st.session_state.board_summary
+    technology_report = st.session_state.technology_report
     qa_response = st.session_state.qa_response
     evaluation_response = st.session_state.evaluation_response
 
-    if not board_summary and not qa_response and not evaluation_response:
-        st.info("Run Executive Q&A, generate a board summary, or run evaluation to view citations.")
+    if not board_summary and not technology_report and not qa_response and not evaluation_response:
+        st.info("Run Executive Q&A, generate a report, generate a board summary, or run evaluation to view citations.")
         return
 
     if board_summary:
         _render_citations(board_summary.get("citations", []), title="Board Summary Evidence")
+    if technology_report:
+        _render_citations(technology_report.get("citations", []), title="Technology Diligence Evidence")
     if qa_response:
         _render_citations(qa_response.get("citations", []), title="Q&A Evidence")
     if evaluation_response:
@@ -620,21 +730,35 @@ def _render_evidence_section() -> None:
 def _render_export_section() -> None:
     st.header("Export Markdown")
     board_summary = st.session_state.board_summary
+    technology_report = st.session_state.technology_report
 
-    if not board_summary:
-        st.info("Generate a board summary before exporting a memo.")
+    if not board_summary and not technology_report:
+        st.info("Generate a board summary or technology due diligence report before exporting.")
         return
 
-    markdown = _build_markdown_memo(board_summary)
-    st.download_button(
-        label="Download Board Memo.md",
-        data=markdown,
-        file_name="Board Memo.md",
-        mime="text/markdown",
-        use_container_width=True,
-    )
-    with st.expander("Markdown preview"):
-        st.code(markdown, language="markdown")
+    if board_summary:
+        markdown = _build_markdown_memo(board_summary)
+        st.download_button(
+            label="Download Board Memo.md",
+            data=markdown,
+            file_name="Board Memo.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+        with st.expander("Board memo Markdown preview"):
+            st.code(markdown, language="markdown")
+
+    if technology_report:
+        report_markdown = _build_technology_report_markdown(technology_report)
+        st.download_button(
+            label="Download Technology Due Diligence Report.md",
+            data=report_markdown,
+            file_name="Technology Due Diligence Report.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+        with st.expander("Technology diligence Markdown preview"):
+            st.code(report_markdown, language="markdown")
 
 
 def _upload_document(
@@ -868,6 +992,7 @@ def _set_active_document_set(document_set_id: str, name: str) -> None:
     st.session_state.selected_documents = []
     st.session_state.qa_response = None
     st.session_state.board_summary = None
+    st.session_state.technology_report = None
     st.session_state.evaluation_response = None
 
 
@@ -881,6 +1006,7 @@ def _clear_active_document_set() -> None:
     st.session_state.selected_documents = []
     st.session_state.qa_response = None
     st.session_state.board_summary = None
+    st.session_state.technology_report = None
     st.session_state.evaluation_response = None
 
 
@@ -888,7 +1014,7 @@ def _clear_local_ui_state() -> None:
     for key in LOCAL_UI_STATE_KEYS:
         if key in {"uploaded_documents", "selected_documents"}:
             st.session_state[key] = []
-        elif key in {"qa_response", "board_summary", "evaluation_response"}:
+        elif key in {"qa_response", "board_summary", "technology_report", "evaluation_response"}:
             st.session_state[key] = None
         elif key == "evaluation_questions_initialized":
             st.session_state[key] = False
@@ -954,6 +1080,7 @@ def _remove_document_from_local_state(document_id: str | None) -> None:
             st.session_state[key] = ""
     st.session_state.qa_response = None
     st.session_state.board_summary = None
+    st.session_state.technology_report = None
     st.session_state.evaluation_response = None
 
 
@@ -1149,6 +1276,83 @@ def _build_evaluation_markdown(response: dict[str, Any]) -> str:
                 )
 
     return "\n".join(lines).strip() + "\n"
+
+
+def _build_technology_report_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Technology Due Diligence Report",
+        "",
+        f"Investigation ID: `{report.get('document_set_id', '')}`",
+        f"Report Type: `{report.get('report_type', 'technology_due_diligence')}`",
+        "",
+        "## Executive Summary",
+        report.get("executive_summary", ""),
+        "",
+        "## Overall Risk Rating",
+        f"Risk Rating: **{str(report.get('overall_risk_rating', 'unknown')).title()}**",
+        f"Confidence: **{str(report.get('confidence', 'low')).title()}**",
+        "",
+    ]
+    lines.extend(_markdown_list("Top 5 Risks", report.get("top_5_risks", [])))
+    lines.extend(["## Findings", ""])
+    for finding in report.get("findings", []):
+        lines.extend(
+            [
+                f"### {_format_summary_type(finding.get('category', 'finding'))}",
+                f"- Title: {finding.get('title', '')}",
+                f"- Risk Rating: {str(finding.get('risk_rating', '')).title()}",
+                f"- Confidence: {str(finding.get('confidence', '')).title()}",
+                f"- Recommended Owner: {finding.get('recommended_owner', '')}",
+                "",
+                f"**Business Impact:** {finding.get('business_impact', '')}",
+                "",
+                f"**Evidence Summary:** {finding.get('evidence_summary', '')}",
+                "",
+                f"**Recommended Action:** {finding.get('recommended_action', '')}",
+                "",
+                "#### Citations",
+                "",
+            ]
+        )
+        lines.extend(_markdown_citations(finding.get("citations", []), heading_level="#####"))
+
+    lines.extend(_markdown_list("Management Questions", report.get("management_questions", [])))
+    lines.extend(_markdown_list("Board Discussion Points", report.get("board_discussion_points", [])))
+    lines.extend(_markdown_list("Recommended Actions", report.get("recommended_actions", [])))
+    lines.extend(["## 30/60/90-Day Plan", ""])
+    plan = report.get("thirty_sixty_ninety_day_plan", {})
+    lines.extend(_markdown_list("Days 1-30", plan.get("days_1_30", [])))
+    lines.extend(_markdown_list("Days 31-60", plan.get("days_31_60", [])))
+    lines.extend(_markdown_list("Days 61-90", plan.get("days_61_90", [])))
+    lines.extend(_markdown_list("Limitations", report.get("limitations", [])))
+    lines.extend(["## Citations", ""])
+    lines.extend(_markdown_citations(report.get("citations", []), heading_level="###"))
+    return "\n".join(lines).strip() + "\n"
+
+
+def _markdown_citations(citations: list[dict[str, Any]], heading_level: str) -> list[str]:
+    if not citations:
+        return ["No citations returned.", ""]
+
+    lines = []
+    for index, citation in enumerate(citations, start=1):
+        label = citation.get("source_label") or f"S{index}"
+        lines.extend(
+            [
+                f"{heading_level} {label}",
+                f"- Document: {citation.get('document_title', 'Untitled document')}",
+                f"- Pages: {citation.get('page_start', '?')}-{citation.get('page_end', '?')}",
+                f"- Document ID: `{citation.get('document_id', '')}`",
+                f"- Chunk ID: `{citation.get('chunk_id', '')}`",
+                f"- Relevance: {citation.get('relevance_reason') or 'Not specified.'}",
+                "",
+                "**Relevant excerpt**",
+                "",
+                citation.get("excerpt", ""),
+                "",
+            ]
+        )
+    return lines
 
 
 def _markdown_list(title: str, values: list[str]) -> list[str]:

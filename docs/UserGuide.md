@@ -49,10 +49,11 @@ The standard workflow is:
 5. Embed chunks for semantic search.
 6. Ask executive questions scoped to the active investigation.
 7. Run technology due diligence assessments.
-8. Generate a board summary.
-9. Inspect citations and evidence.
-10. Evaluate output quality.
-11. Export Markdown memo or evaluation report.
+8. Generate a technology due diligence report.
+9. Generate a board summary.
+10. Inspect citations and evidence.
+11. Evaluate output quality.
+12. Export Markdown memo, report, or evaluation output.
 
 ## Investigation Workspaces
 
@@ -158,6 +159,46 @@ Each assessment returns:
 - limitations
 
 The current implementation uses deterministic scoring and retrieved document evidence. It is intended to support diligence review, not replace technical interviews, architecture walkthroughs, or security testing.
+
+## Technology Due Diligence Report
+
+The Technology Due Diligence Report Generator creates a structured board-quality report for the active investigation workspace. It retrieves evidence only from documents attached to the selected workspace, so SampleCo, FinTechCo, and AcquisitionTargetCo investigations remain isolated unless the user intentionally uses cross-investigation analysis elsewhere.
+
+Recommended inputs include:
+
+- executive summary
+- technology assessment
+- security assessment
+- engineering organization review
+- AI readiness assessment
+- technology roadmap
+- cloud cost analysis
+- M&A or integration readiness materials
+
+The report covers:
+
+- architecture
+- security
+- technical debt
+- engineering organization
+- key person risk
+- AI readiness
+- cloud cost
+- integration readiness
+
+Risk ratings:
+
+- `red`: material technology risk supported by multiple evidence passages or strong business impact indicators.
+- `yellow`: moderate risk, manageable but requiring validation, remediation, or monitoring.
+- `green`: limited evidence of concern or controls appear adequate based on retrieved material.
+
+Confidence levels:
+
+- `high`: multiple relevant citations across more than one document.
+- `medium`: one or two relevant citations, or evidence is useful but incomplete.
+- `low`: weak, indirect, or limited evidence.
+
+Outputs include executive summary, top risks, category findings, recommended owners, management questions, board discussion points, recommended actions, a 30/60/90-day plan, limitations, and citations with relevant excerpts. The report can be downloaded as Markdown.
 
 ## Citations And Evidence
 

@@ -1,4 +1,10 @@
-from app.advisor.providers.base import BoardMemoResponse, LLMProvider, LLMResponse, SourceContext
+from app.advisor.providers.base import (
+    BoardMemoResponse,
+    LLMProvider,
+    LLMResponse,
+    SourceContext,
+    TechnologyDiligenceDraftResponse,
+)
 
 
 class MockLLMProvider(LLMProvider):
@@ -61,6 +67,45 @@ class MockLLMProvider(LLMProvider):
             ],
             recommended_actions=[
                 f"Ask management to map the cited risks to accountable owners and near-term milestones. {first_label}",
+            ],
+            limitations=["Mock provider response for local development; no LLM generation was performed."],
+            confidence="medium",
+        )
+
+    def generate_technology_diligence_report(
+        self,
+        sources: list[SourceContext],
+        system_prompt: str,
+        user_prompt: str,
+    ) -> TechnologyDiligenceDraftResponse:
+        if not sources:
+            return TechnologyDiligenceDraftResponse(
+                executive_summary="There is not enough retrieved evidence to prepare a technology due diligence report.",
+                top_5_risks=[],
+                management_questions=[],
+                board_discussion_points=[],
+                recommended_actions=[],
+                limitations=["No source chunks were available for report generation."],
+                confidence="low",
+            )
+
+        first_label = sources[0].label
+        return TechnologyDiligenceDraftResponse(
+            executive_summary=(
+                "The retrieved diligence materials indicate technology governance, security, operational, "
+                f"and scalability themes that require management validation. {first_label}"
+            ),
+            top_5_risks=[
+                f"Validate the highest-rated security, architecture, and key-person risks with management. {first_label}",
+            ],
+            management_questions=[
+                f"What owners, evidence, and remediation dates support the cited diligence risks in {first_label}?",
+            ],
+            board_discussion_points=[
+                f"Confirm whether management has the mandate and capacity to address cited technology risks. {first_label}",
+            ],
+            recommended_actions=[
+                f"Map cited technology risks to accountable owners, dates, and board-visible operating metrics. {first_label}",
             ],
             limitations=["Mock provider response for local development; no LLM generation was performed."],
             confidence="medium",

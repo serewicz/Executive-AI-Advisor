@@ -2,7 +2,14 @@ import json
 
 from openai import OpenAI, OpenAIError
 
-from app.advisor.providers.base import BoardMemoResponse, LLMError, LLMProvider, LLMResponse, SourceContext
+from app.advisor.providers.base import (
+    BoardMemoResponse,
+    LLMError,
+    LLMProvider,
+    LLMResponse,
+    SourceContext,
+    TechnologyDiligenceDraftResponse,
+)
 from app.core.config import settings
 
 
@@ -101,6 +108,51 @@ class OpenAIChatProvider(LLMProvider):
             recommended_actions=_normalize_list(memo.get("recommended_actions")),
             limitations=_normalize_list(memo.get("limitations")),
             confidence=_normalize_confidence(memo.get("confidence", payload.get("confidence"))),
+        )
+
+    def generate_technology_diligence_report(
+        self,
+        sources: list[SourceContext],
+        system_prompt: str,
+        user_prompt: str,
+    ) -> TechnologyDiligenceDraftResponse:
+        if not settings.openai_api_key:
+            raise LLMError("OPENAI_API_KEY is required when LLM_PROVIDER=openai.")
+
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        try:
+            response = client.chat.completions.create(
+                model=settings.openai_chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.2,
+            )
+        except OpenAIError as exc:
+            raise LLMError(f"OpenAI technology diligence report request failed: {exc}") from exc
+        except Exception as exc:
+            raise LLMError(f"Technology diligence report generation failed: {exc}") from exc
+
+        content = response.choices[0].message.content
+        if not content:
+            raise LLMError("OpenAI technology diligence report response did not include content.")
+
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise LLMError("OpenAI technology diligence report response was not valid JSON.") from exc
+
+        return TechnologyDiligenceDraftResponse(
+            executive_summary=str(payload.get("executive_summary", "")).strip(),
+            top_5_risks=_normalize_list(payload.get("top_5_risks")),
+            management_questions=_normalize_list(payload.get("management_questions")),
+            board_discussion_points=_normalize_list(payload.get("board_discussion_points")),
+            recommended_actions=_normalize_list(payload.get("recommended_actions")),
+            limitations=_normalize_list(payload.get("limitations")),
+            confidence=_normalize_confidence(payload.get("confidence")),
         )
 
 

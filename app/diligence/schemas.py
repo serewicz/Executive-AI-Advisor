@@ -13,6 +13,17 @@ AssessmentType = Literal[
     "key_person_risk",
     "ai_readiness",
 ]
+TechnologyReportCategory = Literal[
+    "architecture",
+    "security",
+    "technical_debt",
+    "engineering_org",
+    "key_person_risk",
+    "ai_readiness",
+    "cloud_cost",
+    "integration_readiness",
+]
+RiskRating = Literal["red", "yellow", "green"]
 
 
 class DiligenceAnalyzeRequest(BaseModel):
@@ -51,3 +62,47 @@ class DiligenceAssessmentResponse(BaseModel):
     citations: list[Citation]
     confidence: Confidence
     limitations: list[str]
+
+
+class TechnologyDiligenceRequest(BaseModel):
+    document_set_id: UUID
+    top_k: int = Field(default=20, ge=5, le=40)
+    include_100_day_plan: bool = True
+
+
+class TechnologyDiligenceCitation(Citation):
+    pass
+
+
+class TechnologyDiligenceFinding(BaseModel):
+    category: TechnologyReportCategory
+    title: str
+    risk_rating: RiskRating
+    confidence: Confidence
+    business_impact: str
+    evidence_summary: str
+    recommended_action: str
+    recommended_owner: Literal["CEO", "CTO", "VP Engineering", "CISO", "CFO", "Product", "Board"]
+    citations: list[TechnologyDiligenceCitation]
+
+
+class TechnologyDiligencePlan(BaseModel):
+    days_1_30: list[str]
+    days_31_60: list[str]
+    days_61_90: list[str]
+
+
+class TechnologyDiligenceReport(BaseModel):
+    document_set_id: UUID
+    report_type: Literal["technology_due_diligence"] = "technology_due_diligence"
+    executive_summary: str
+    overall_risk_rating: RiskRating
+    confidence: Confidence
+    findings: list[TechnologyDiligenceFinding]
+    top_5_risks: list[str]
+    management_questions: list[str]
+    board_discussion_points: list[str]
+    recommended_actions: list[str]
+    thirty_sixty_ninety_day_plan: TechnologyDiligencePlan
+    limitations: list[str]
+    citations: list[TechnologyDiligenceCitation]
