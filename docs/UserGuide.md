@@ -50,10 +50,11 @@ The standard workflow is:
 6. Ask executive questions scoped to the active investigation.
 7. Run technology due diligence assessments.
 8. Generate a technology due diligence report.
-9. Generate a board summary.
-10. Inspect citations and evidence.
-11. Evaluate output quality.
-12. Export Markdown memo, report, or evaluation output.
+9. Generate a 100-day technology plan.
+10. Generate a board summary.
+11. Inspect citations and evidence.
+12. Evaluate output quality.
+13. Export Markdown memo, report, plan, or evaluation output.
 
 ## Investigation Workspaces
 
@@ -199,6 +200,24 @@ Confidence levels:
 - `low`: weak, indirect, or limited evidence.
 
 Outputs include executive summary, top risks, category findings, recommended owners, management questions, board discussion points, recommended actions, a 30/60/90-day plan, limitations, and citations with relevant excerpts. The report can be downloaded as Markdown.
+
+## 100-Day Technology Plan
+
+The 100-Day Technology Plan Generator converts Technology Due Diligence Report findings into a sequenced operating plan for a CTO, operating partner, or portfolio company. It does not regenerate findings from scratch. It consumes the existing findings, risk ratings, confidence levels, business impacts, recommended owners, and citations.
+
+Supported plan types:
+
+- `growth_equity`: scalability, governance, delivery predictability, and security.
+- `acquisition_integration`: knowledge transfer, identity integration, deployment standardization, documentation, and support transition.
+- `turnaround`: risk reduction, cost control, operational stability, and ownership clarity.
+
+Prioritization:
+
+- red findings become days 1-30 actions
+- yellow findings become days 31-60 actions
+- green findings become days 61-90 or monitoring actions
+
+Outputs include executive summary, phase-based actions, business rationale, owners, risk reduction, citations, success metrics, board checkpoints, dependencies, and limitations. The plan can be downloaded as Markdown.
 
 ## Citations And Evidence
 

@@ -15,6 +15,8 @@ from app.diligence.service import (
     analyze_document,
     generate_technology_due_diligence_report,
 )
+from app.planning.schemas import HundredDayPlanRequest, HundredDayPlanResponse
+from app.planning.service import generate_100_day_plan
 
 
 router = APIRouter(prefix="/diligence", tags=["diligence"])
@@ -50,6 +52,25 @@ def generate_technology_report(
             document_set_id=request.document_set_id,
             top_k=request.top_k,
             include_100_day_plan=request.include_100_day_plan,
+            db=db,
+        )
+    except DiligenceDocumentSetNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except DiligenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.post("/100-day-plan", response_model=HundredDayPlanResponse)
+def generate_hundred_day_plan(
+    request: HundredDayPlanRequest,
+    db: Session = Depends(get_db),
+) -> HundredDayPlanResponse:
+    try:
+        return generate_100_day_plan(
+            document_set_id=request.document_set_id,
+            plan_type=request.plan_type,
             db=db,
         )
     except DiligenceDocumentSetNotFoundError as exc:

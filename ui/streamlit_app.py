@@ -37,6 +37,7 @@ LOCAL_UI_STATE_KEYS = [
     "qa_response",
     "board_summary",
     "technology_report",
+    "hundred_day_plan",
     "evaluation_response",
     "evaluation_questions_text",
     "evaluation_questions_initialized",
@@ -68,6 +69,8 @@ def main() -> None:
     st.divider()
     _render_technology_report_section()
     st.divider()
+    _render_hundred_day_plan_section()
+    st.divider()
     _render_evaluation_section()
     st.divider()
     _render_evidence_section()
@@ -89,6 +92,7 @@ def _initialize_state() -> None:
         "qa_response": None,
         "board_summary": None,
         "technology_report": None,
+        "hundred_day_plan": None,
         "evaluation_response": None,
         "evaluation_questions_text": "",
         "evaluation_questions_initialized": False,
@@ -279,6 +283,7 @@ def _render_upload_section() -> None:
         st.session_state.qa_response = None
         st.session_state.board_summary = None
         st.session_state.technology_report = None
+        st.session_state.hundred_day_plan = None
         st.session_state.evaluation_response = None
         if uploaded_count:
             detail = _load_active_document_set_detail()
@@ -607,6 +612,89 @@ def _render_technology_plan(plan: dict[str, list[str]]) -> None:
         _render_list("Days 61-90", plan.get("days_61_90", []))
 
 
+def _render_hundred_day_plan_section() -> None:
+    st.header("100-Day Technology Plan")
+    st.markdown(
+        '<div class="section-note">Convert diligence findings into an operating plan for a CTO, operating partner, or portfolio company.</div>',
+        unsafe_allow_html=True,
+    )
+
+    document_set_id = st.session_state.active_document_set_id
+    if document_set_id:
+        st.caption(f"Scoped to active investigation: {st.session_state.active_document_set_name}")
+    else:
+        st.info("Select or create an investigation before generating a 100-day plan.")
+
+    plan_type = st.selectbox(
+        "Plan type",
+        ["growth_equity", "acquisition_integration", "turnaround"],
+        format_func=_format_summary_type,
+        key="hundred_day_plan_type",
+    )
+
+    if st.button("Generate 100-Day Plan", disabled=not document_set_id, use_container_width=True):
+        with st.spinner("Generating 100-day technology plan"):
+            response = _post_json(
+                "/diligence/100-day-plan",
+                {
+                    "document_set_id": document_set_id,
+                    "plan_type": plan_type,
+                },
+            )
+        if response:
+            st.session_state.hundred_day_plan = response
+
+    plan = st.session_state.hundred_day_plan
+    if plan:
+        _render_hundred_day_plan(plan)
+
+
+def _render_hundred_day_plan(plan: dict[str, Any]) -> None:
+    st.subheader("100-Day Technology Plan")
+    col1, col2 = st.columns(2)
+    col1.metric("Plan Type", _format_summary_type(plan.get("plan_type", "")))
+    col2.metric("Overall Priority", str(plan.get("overall_priority", "unknown")).title())
+
+    st.markdown("#### Executive Summary")
+    st.markdown(plan.get("executive_summary", "No executive summary returned."))
+
+    _render_plan_actions("Days 1-30", plan.get("days_1_30", []))
+    _render_plan_actions("Days 31-60", plan.get("days_31_60", []))
+    _render_plan_actions("Days 61-90", plan.get("days_61_90", []))
+    _render_list("Success Metrics", plan.get("success_metrics", []))
+    _render_list("Board Checkpoints", plan.get("board_checkpoints", []))
+    _render_list("Dependencies", plan.get("dependencies", []))
+    _render_limitations(plan.get("limitations", []))
+
+    markdown = _build_hundred_day_plan_markdown(plan)
+    st.download_button(
+        label="Download 100-Day Technology Plan.md",
+        data=markdown,
+        file_name="100-Day Technology Plan.md",
+        mime="text/markdown",
+        key=f"download_hundred_day_plan_markdown_{plan.get('plan_type', 'plan')}_{plan.get('document_set_id', 'unknown')}",
+        use_container_width=True,
+    )
+
+
+def _render_plan_actions(title: str, actions: list[dict[str, Any]]) -> None:
+    st.markdown(f"#### {title}")
+    if not actions:
+        st.markdown("No actions assigned.")
+        return
+
+    for index, action in enumerate(actions, start=1):
+        st.markdown(f"##### {index}. {action.get('action', '')}")
+        st.caption(f"Priority: {str(action.get('priority', '')).title()} | Owner: {action.get('owner', '')}")
+        st.markdown(f"**Business rationale:** {action.get('business_rationale', '')}")
+        st.markdown(f"**Risk reduction:** {action.get('risk_reduction', '')}")
+        _render_citations(
+            action.get("citations", []),
+            title=f"{title} Action {index} Evidence",
+            use_expanders=False,
+        )
+
+
 def _render_evaluation_section() -> None:
     st.header("Evaluation")
     st.markdown(
@@ -740,10 +828,11 @@ def _render_evidence_section() -> None:
     st.header("Citations / Evidence")
     board_summary = st.session_state.board_summary
     technology_report = st.session_state.technology_report
+    hundred_day_plan = st.session_state.hundred_day_plan
     qa_response = st.session_state.qa_response
     evaluation_response = st.session_state.evaluation_response
 
-    if not board_summary and not technology_report and not qa_response and not evaluation_response:
+    if not board_summary and not technology_report and not hundred_day_plan and not qa_response and not evaluation_response:
         st.info("Run Executive Q&A, generate a report, generate a board summary, or run evaluation to view citations.")
         return
 
@@ -751,6 +840,10 @@ def _render_evidence_section() -> None:
         _render_citations(board_summary.get("citations", []), title="Board Summary Evidence")
     if technology_report:
         _render_citations(technology_report.get("citations", []), title="Technology Diligence Evidence")
+    if hundred_day_plan:
+        for phase in ("days_1_30", "days_31_60", "days_61_90"):
+            for index, action in enumerate(hundred_day_plan.get(phase, []), start=1):
+                _render_citations(action.get("citations", []), title=f"100-Day Plan {phase} Action {index} Evidence")
     if qa_response:
         _render_citations(qa_response.get("citations", []), title="Q&A Evidence")
     if evaluation_response:
@@ -762,9 +855,10 @@ def _render_export_section() -> None:
     st.header("Export Markdown")
     board_summary = st.session_state.board_summary
     technology_report = st.session_state.technology_report
+    hundred_day_plan = st.session_state.hundred_day_plan
 
-    if not board_summary and not technology_report:
-        st.info("Generate a board summary or technology due diligence report before exporting.")
+    if not board_summary and not technology_report and not hundred_day_plan:
+        st.info("Generate a board summary, technology due diligence report, or 100-day plan before exporting.")
         return
 
     if board_summary:
@@ -792,6 +886,19 @@ def _render_export_section() -> None:
         )
         with st.expander("Technology diligence Markdown preview"):
             st.code(report_markdown, language="markdown")
+
+    if hundred_day_plan:
+        plan_markdown = _build_hundred_day_plan_markdown(hundred_day_plan)
+        st.download_button(
+            label="Download 100-Day Technology Plan.md",
+            data=plan_markdown,
+            file_name="100-Day Technology Plan.md",
+            mime="text/markdown",
+            key=f"download_hundred_day_plan_export_markdown_{hundred_day_plan.get('plan_type', 'plan')}_{hundred_day_plan.get('document_set_id', 'unknown')}",
+            use_container_width=True,
+        )
+        with st.expander("100-day plan Markdown preview"):
+            st.code(plan_markdown, language="markdown")
 
 
 def _upload_document(
@@ -1026,6 +1133,7 @@ def _set_active_document_set(document_set_id: str, name: str) -> None:
     st.session_state.qa_response = None
     st.session_state.board_summary = None
     st.session_state.technology_report = None
+    st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
 
 
@@ -1040,6 +1148,7 @@ def _clear_active_document_set() -> None:
     st.session_state.qa_response = None
     st.session_state.board_summary = None
     st.session_state.technology_report = None
+    st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
 
 
@@ -1047,7 +1156,7 @@ def _clear_local_ui_state() -> None:
     for key in LOCAL_UI_STATE_KEYS:
         if key in {"uploaded_documents", "selected_documents"}:
             st.session_state[key] = []
-        elif key in {"qa_response", "board_summary", "technology_report", "evaluation_response"}:
+        elif key in {"qa_response", "board_summary", "technology_report", "hundred_day_plan", "evaluation_response"}:
             st.session_state[key] = None
         elif key == "evaluation_questions_initialized":
             st.session_state[key] = False
@@ -1114,6 +1223,7 @@ def _remove_document_from_local_state(document_id: str | None) -> None:
     st.session_state.qa_response = None
     st.session_state.board_summary = None
     st.session_state.technology_report = None
+    st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
 
 
@@ -1402,6 +1512,51 @@ def _build_technology_report_markdown(report: dict[str, Any]) -> str:
     lines.extend(["## Citations", ""])
     lines.extend(_markdown_citations(report.get("citations", []), heading_level="###"))
     return "\n".join(lines).strip() + "\n"
+
+
+def _build_hundred_day_plan_markdown(plan: dict[str, Any]) -> str:
+    lines = [
+        "# 100-Day Technology Plan",
+        "",
+        f"Investigation ID: `{plan.get('document_set_id', '')}`",
+        f"Plan Type: `{plan.get('plan_type', '')}`",
+        f"Overall Priority: **{str(plan.get('overall_priority', '')).title()}**",
+        "",
+        "## Executive Summary",
+        plan.get("executive_summary", ""),
+        "",
+    ]
+    lines.extend(_markdown_plan_actions("Days 1-30", plan.get("days_1_30", [])))
+    lines.extend(_markdown_plan_actions("Days 31-60", plan.get("days_31_60", [])))
+    lines.extend(_markdown_plan_actions("Days 61-90", plan.get("days_61_90", [])))
+    lines.extend(_markdown_list("Success Metrics", plan.get("success_metrics", [])))
+    lines.extend(_markdown_list("Board Checkpoints", plan.get("board_checkpoints", [])))
+    lines.extend(_markdown_list("Dependencies", plan.get("dependencies", [])))
+    lines.extend(_markdown_list("Limitations", plan.get("limitations", [])))
+    return "\n".join(lines).strip() + "\n"
+
+
+def _markdown_plan_actions(title: str, actions: list[dict[str, Any]]) -> list[str]:
+    lines = [f"## {title}", ""]
+    if not actions:
+        lines.extend(["No actions assigned.", ""])
+        return lines
+
+    for index, action in enumerate(actions, start=1):
+        lines.extend(
+            [
+                f"### {index}. {action.get('action', '')}",
+                f"- Priority: {str(action.get('priority', '')).title()}",
+                f"- Owner: {action.get('owner', '')}",
+                f"- Business Rationale: {action.get('business_rationale', '')}",
+                f"- Risk Reduction: {action.get('risk_reduction', '')}",
+                "",
+                "#### Citations",
+                "",
+            ]
+        )
+        lines.extend(_markdown_citations(action.get("citations", []), heading_level="#####"))
+    return lines
 
 
 def _markdown_citations(citations: list[dict[str, Any]], heading_level: str) -> list[str]:

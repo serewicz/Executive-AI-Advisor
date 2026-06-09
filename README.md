@@ -38,9 +38,10 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 - Scope Q&A and board summaries to the active investigation by default
 - Run technology due diligence assessments
 - Generate technology due diligence reports for active investigations
+- Generate 100-day technology operating plans from diligence findings
 - Generate board summaries with citations, confidence, and limitations
 - Render workflows in Streamlit without raw JSON
-- Export board memos and evaluation reports as Markdown
+- Export board memos, diligence reports, 100-day plans, and evaluation reports as Markdown
 - Run deterministic evaluation for citation quality, groundedness, relevance, and executive usefulness
 
 ## Quick Start
@@ -106,7 +107,8 @@ Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:
 7. Generate cited Q&A or board memos.
 8. Run technology due diligence assessments.
 9. Generate technology due diligence reports with risk ratings and 30/60/90-day actions.
-10. Evaluate output quality and store evaluation runs.
+10. Generate 100-day technology operating plans from diligence findings.
+11. Evaluate output quality and store evaluation runs.
 
 See [Architecture](docs/Architecture.md) for the full system design.
 
@@ -134,6 +136,7 @@ Implemented:
 - PDF upload, parsing, chunking, embeddings, search
 - cited Q&A
 - board summary generation
+- technology due diligence report and 100-day plan generation
 - Streamlit UI
 - deterministic evaluation framework
 - SLSA provenance and security documentation

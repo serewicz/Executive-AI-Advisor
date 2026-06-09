@@ -148,7 +148,21 @@ Explain the ratings:
 
 Good input packets include executive summary, technology assessment, security assessment, engineering organization review, AI readiness assessment, roadmap, cloud cost analysis, and integration readiness materials.
 
-### 5. Generate Board Summary
+### 5. Generate 100-Day Technology Plan
+
+Choose a plan type:
+
+- `growth_equity` for SampleCo-style scaling plans.
+- `acquisition_integration` for AcquisitionTargetCo-style integration planning.
+- `turnaround` for stabilization and cost-control scenarios.
+
+Click Generate 100-Day Plan.
+
+Talking point:
+
+The plan is generated from the diligence findings, not from a new open-ended chat prompt. Red findings become days 1-30 actions, yellow findings become days 31-60 actions, and green findings become days 61-90 or monitoring actions. Each action keeps citations so management can inspect the source evidence.
+
+### 6. Generate Board Summary
 
 Choose a summary type such as:
 
@@ -162,7 +176,7 @@ Talking point:
 
 The board memo is structured for executive review: summary, risks, evidence, board questions, recommended actions, limitations, confidence, and citations.
 
-### 6. Inspect Citations
+### 7. Inspect Citations
 
 Open the citation cards.
 
@@ -172,7 +186,7 @@ Every material claim should be reviewable against source excerpts and page range
 
 Citations show metadata first, concise relevant excerpts second, and full source text only when the user asks to inspect it.
 
-### 7. Run Evaluation
+### 8. Run Evaluation
 
 Open the Evaluation section and click Run Evaluation.
 
@@ -180,9 +194,9 @@ Talking point:
 
 Evaluation is currently single-document. It is part of trust, not an afterthought. The system scores citation quality, groundedness, relevance, and executive usefulness.
 
-### 8. Export Markdown Memo
+### 9. Export Markdown Memo
 
-Use Download Board Memo.md, Download Technology Due Diligence Report.md, or Download Evaluation Report.md.
+Use Download Board Memo.md, Download Technology Due Diligence Report.md, Download 100-Day Technology Plan.md, or Download Evaluation Report.md.
 
 Talking point:
 
