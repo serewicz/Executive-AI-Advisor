@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.diligence.service import generate_technology_due_diligence_report
-from app.planning.prompts import PLAN_TYPE_FOCUS, PLAN_TYPE_OUTCOMES, PLAN_TYPE_SUMMARY, SCENARIO_ACTIONS
+from app.planning.prompts import PLAN_TYPE_OUTCOMES, PLAN_TYPE_SUMMARY, SCENARIO_ACTIONS
 from app.planning.schemas import (
     BoardCheckpoint,
     HundredDayPlanAction,
@@ -69,13 +69,12 @@ def _scenario_actions(
     findings,
 ) -> list[HundredDayPlanAction]:
     citations = _phase_citations(findings)
-    owner = _default_owner(plan_type)
     return [
         HundredDayPlanAction(
             priority=priority,
             action=action,
             business_rationale=_scenario_business_rationale(plan_type, action),
-            owner=owner,
+            owner=_owner_for_action(action, plan_type),
             risk_reduction=_scenario_risk_reduction(plan_type, action),
             deliverables=_deliverables_for_action(action, plan_type),
             success_metric=_success_metric_for_action(action, plan_type),
@@ -86,16 +85,13 @@ def _scenario_actions(
 
 
 def _action_from_finding(finding, plan_type: PlanType, priority: PlanPriority) -> HundredDayPlanAction:
-    focus = ", ".join(PLAN_TYPE_FOCUS[plan_type])
     category = finding.category.replace("_", " ")
     action = _action_text(finding, plan_type)
     return HundredDayPlanAction(
         priority=priority,
         action=action,
-        business_rationale=(
-            f"{finding.business_impact} This action supports the {plan_type.replace('_', ' ')} focus on {focus}."
-        ),
-        owner=finding.recommended_owner,
+        business_rationale=_finding_business_rationale(finding, plan_type),
+        owner=_normalize_owner(finding.recommended_owner, category),
         risk_reduction=f"Reduces {category} exposure by addressing: {finding.risk_rationale}",
         deliverables=_deliverables_for_finding(finding),
         success_metric=_success_metric_for_finding(finding),
@@ -114,96 +110,147 @@ def _action_text(finding, plan_type: PlanType) -> str:
 
 def _deliverables_for_finding(finding) -> list[str]:
     category = finding.category.replace("_", " ")
+    owner = _normalize_owner(finding.recommended_owner, category)
     return [
-        f"Confirmed evidence pack for {category}",
-        f"Named accountable owner for {category}",
-        f"Remediation backlog for {category} gaps",
-        f"Board-visible metric for {category} progress",
+        f"{category.title()} evidence pack with cited source excerpts and page references",
+        f"Single accountable owner recorded for {category}: {owner}",
+        f"Prioritized remediation backlog for {category} with due dates and severity labels",
+        f"Board metric for {category} with baseline value, target value, and reporting cadence",
     ]
 
 
 def _success_metric_for_finding(finding) -> str:
     category = finding.category.replace("_", " ")
-    return f"{category.title()} action plan approved by {finding.recommended_owner} with owner, milestone, and status metric."
+    owner = _normalize_owner(finding.recommended_owner, category)
+    return f"{category.title()} remediation plan approved by {owner} with dated milestones and a measurable board status metric."
 
 
 def _deliverables_for_action(action: str, plan_type: PlanType) -> list[str]:
     lower = action.lower()
     if "backup" in lower or "restore" in lower:
         return [
-            "Complete restore test for production database",
-            "Document RTO/RPO assumptions",
-            "Create remediation backlog for failed restore gaps",
-            "Assign owner for recurring restore testing",
+            "Signed restore-test record for production database with elapsed recovery time",
+            "Approved RTO/RPO table for each critical data store",
+            "Remediation backlog for every failed restore step with owner and due date",
+            "Recurring restore-test calendar entry owned by Engineering Manager",
         ]
     if "feature flag" in lower:
         return [
-            "Inventory high-risk release paths",
-            "Define feature flag rollout standards",
-            "Select first release candidate for feature flagging",
-            "Document rollback owner and approval path",
+            "Inventory of top 5 high-risk release paths with current rollback method",
+            "Feature flag rollout standard approved by Product Leader and VP Engineering",
+            "First candidate release selected with flag owner and launch date",
+            "Rollback decision tree naming approver, trigger metric, and time limit",
         ]
     if "observability" in lower or "dashboard" in lower:
         return [
-            "Define critical service health indicators",
-            "Baseline incident, latency, error, and deployment metrics",
-            "Publish executive operating dashboard",
-            "Assign owner for weekly metric review",
+            "Critical workflow list with service-level indicators for availability, latency, and errors",
+            "Baseline incident, latency, error-rate, and deployment-frequency metrics",
+            "Executive operating dashboard published with source systems and refresh cadence",
+            "Weekly metric review owner and escalation path recorded",
         ]
     if "identity" in lower or "access" in lower:
         return [
-            "Inventory privileged access",
-            "Map identity systems and role groups",
-            "Identify access exceptions and remediation owners",
-            "Approve target-state access model",
+            "Privileged access inventory exported with user, role, system, and last-login fields",
+            "Identity system map covering SSO, admin consoles, cloud roles, and service accounts",
+            "Access exception register with remediation owner and target removal date",
+            "Target-state access model approved by Security Lead and acquirer owner where applicable",
         ]
     if "knowledge" in lower or "shadow" in lower or "runbook" in lower:
         return [
-            "Identify top critical workflows",
-            "Complete shadow sessions with named owners",
-            "Create or update critical system runbooks",
-            "Confirm backup owner for each key dependency",
+            "Top 5 critical workflow list ranked by revenue, customer, and operational impact",
+            "Completed shadow-session notes for each workflow with named primary and backup owner",
+            "Runbooks updated with deployment, recovery, escalation, and customer-impact steps",
+            "Backup owner acceptance recorded for each key dependency",
         ]
     if "cloud cost" in lower or "finops" in lower or "spend" in lower:
         return [
-            "Create cloud cost baseline",
-            "Identify top waste and allocation gaps",
-            "Assign FinOps review owner",
-            "Publish savings or allocation target",
+            "Cloud cost baseline by account, service, environment, and product area",
+            "Top 10 waste or allocation gaps with estimated monthly run-rate impact",
+            "FinOps review calendar with Finance and Engineering attendance",
+            "Savings or allocation target approved with dollar amount and due date",
         ]
     if "data model" in lower or "migration" in lower:
         return [
-            "Map core entities and data owners",
-            "Identify migration blockers",
-            "Define validation and reconciliation approach",
-            "Approve migration risk register",
+            "Core entity map covering customer, account, entitlement, billing, and usage objects",
+            "Migration blocker register with severity, owner, and target resolution date",
+            "Validation and reconciliation plan with sample records and acceptance thresholds",
+            "Migration risk register approved by Product Leader and Engineering Manager",
         ]
     if "vulnerab" in lower:
         return [
-            "Triage critical vulnerabilities",
-            "Assign remediation owners",
-            "Set remediation due dates",
-            "Report unresolved critical exposure to executive sponsor",
+            "Critical vulnerability list with asset, exploitability, owner, and compensating control",
+            "Remediation tickets opened for every critical finding",
+            "Due dates assigned using severity-based SLA",
+            "Executive exception report for any unresolved critical exposure",
         ]
     if "delivery cadence" in lower or "okr" in lower:
         return [
-            "Review delivery metrics for prior quarter",
-            "Define release cadence target",
-            "Align engineering OKRs to growth priorities",
-            "Publish delivery operating review template",
+            "Prior-quarter delivery metrics covering cycle time, escaped defects, release frequency, and carryover",
+            "Release cadence target approved with exception criteria",
+            "Engineering OKRs mapped to top growth priorities and customer commitments",
+            "Delivery operating review template with owner, metric source, and weekly agenda",
         ]
     if "ai pilot" in lower:
         return [
-            "Select one low-risk AI pilot",
-            "Define data governance and approval criteria",
-            "Assign business owner and technical owner",
-            "Document success and stop criteria",
+            "One low-risk AI pilot selected with excluded data classes documented",
+            "Data governance checklist covering privacy, retention, model access, and human review",
+            "Named business owner and technical owner for the pilot",
+            "Pilot scorecard with success threshold, stop criteria, and review date",
+        ]
+    if "capacity planning" in lower:
+        return [
+            "Capacity model for 2x and 3x customer, traffic, and data-volume scenarios",
+            "Bottleneck register with owner, cost estimate, and target mitigation date",
+            "Hiring and infrastructure assumptions reviewed by Finance",
+            "Board-ready capacity recommendation with spend and risk tradeoffs",
+        ]
+    if "scalability review" in lower:
+        return [
+            "Architecture review covering database, queueing, API, deployment, and observability bottlenecks",
+            "Top 5 scalability risks ranked by customer and revenue impact",
+            "Decision log for build, buy, defer, or retire options",
+            "Modernization backlog with estimates, owners, and sequencing",
+        ]
+    if "hiring" in lower or "coverage plan" in lower:
+        return [
+            "Engineering coverage map by product area, critical system, and single-owner dependency",
+            "Hiring plan with role, level, timing, and capacity gap addressed",
+            "Interview loop and onboarding owner assigned for each approved role",
+            "Board staffing request with budget and delivery-risk rationale",
+        ]
+    if "deployment" in lower or "release" in lower or "handoff" in lower:
+        return [
+            "Current-state deployment workflow with manual approvals and failure points identified",
+            "Target release handoff checklist approved by Engineering Manager",
+            "Rollback rehearsal evidence for one representative release",
+            "Release ownership matrix covering acquirer, target, product, and support roles where applicable",
+        ]
+    if "workshop" in lower:
+        return [
+            "Workshop agenda covering architecture, security, deployment, support, data, and identity",
+            "Attendance record with acquirer and target owners for each technical domain",
+            "Decision and blocker log published within two business days",
+            "Follow-up action tracker with owner and due date for each blocker",
+        ]
+    if "blocker" in lower:
+        return [
+            "Integration blocker register with severity, impact, owner, and required decision",
+            "Weekly blocker review cadence with acquirer and target attendance",
+            "Escalation threshold for blockers affecting close, customer continuity, or Day 1 support",
+            "Closed-blocker evidence attached to the register",
+        ]
+    if "readout" in lower or "scorecard" in lower:
+        return [
+            "Board scorecard showing completed, late, deferred, and blocked actions",
+            "Residual risk register with owner, impact, and next decision date",
+            "Evidence appendix linking each completed action to source citations or completion artifacts",
+            "Next-quarter decision log with budget, staffing, and sequencing asks",
         ]
     return [
-        f"Define scope and owner for {action}",
-        "Create milestone plan and operating cadence",
-        "Identify evidence required for board review",
-        "Publish status metric for executive review",
+        f"Action charter for '{action}' with scope, named owner, due date, and affected systems",
+        "Milestone tracker with weekly status, blocked items, and management decisions required",
+        "Evidence checklist naming each artifact required for board review",
+        "Executive status metric with baseline, target, and reporting cadence",
     ]
 
 
@@ -417,20 +464,129 @@ def _phase_citations(findings) -> list:
     return citations
 
 
-def _default_owner(plan_type: PlanType) -> str:
-    if plan_type == "turnaround":
-        return "CTO"
-    if plan_type == "acquisition_integration":
-        return "CTO"
+def _finding_business_rationale(finding, plan_type: PlanType) -> str:
+    category = finding.category.replace("_", " ")
+    evidence = finding.evidence_summary.rstrip(".")
+    impact = finding.business_impact.rstrip(".")
+    risk = finding.risk_rationale.rstrip(".")
+    scenario_clause = {
+        "growth_equity": "before growth plans increase customer volume, release pressure, or operating complexity",
+        "acquisition_integration": "before ownership, support, or system handoffs introduce integration risk",
+        "turnaround": "before the issue continues to consume management attention, cash, or customer trust",
+    }[plan_type]
+    return (
+        f"The {category} finding cites {evidence}. "
+        f"Business impact: {impact}. "
+        f"Risk rationale: {risk}. "
+        f"This action creates accountable remediation evidence {scenario_clause}."
+    )
+
+
+def _normalize_owner(owner: str | None, category: str) -> str:
+    if owner and owner.upper() == "CFO":
+        return "Finance"
+    if owner and owner.upper() == "CISO":
+        return "CISO / Security Lead"
+    if owner:
+        return owner
+    if "security" in category:
+        return "CISO / Security Lead"
+    if "cloud cost" in category:
+        return "Finance"
+    if "key person" in category:
+        return "CEO"
+    if "ai" in category:
+        return "Product Leader"
     return "VP Engineering"
 
 
+def _owner_for_action(action: str, plan_type: PlanType) -> str:
+    lower = action.lower()
+    if "spend" in lower or "cost" in lower or "finops" in lower:
+        return "Finance"
+    if "vulnerab" in lower or "access" in lower or "identity" in lower or "security" in lower:
+        return "CISO / Security Lead"
+    if "ai pilot" in lower or "data model" in lower or "migration" in lower:
+        return "Product Leader"
+    if "delivery cadence" in lower or "okr" in lower or "hiring" in lower or "coverage" in lower:
+        return "VP Engineering"
+    if "production ownership" in lower or "incident roles" in lower:
+        return "CTO"
+    if "runbook" in lower or "restore" in lower or "backup" in lower or "deployment" in lower or "release" in lower:
+        return "Engineering Manager"
+    if "workshop" in lower or "support handoff" in lower or "blocker" in lower:
+        return "CTO"
+    if "readout" in lower or "scorecard" in lower or "roadmap" in lower:
+        return "Board"
+    if plan_type == "turnaround":
+        return "CEO"
+    return "CTO"
+
+
 def _scenario_business_rationale(plan_type: PlanType, action: str) -> str:
-    return f"{action} supports {PLAN_TYPE_SUMMARY[plan_type]}."
+    lower = action.lower()
+    if "feature flag" in lower:
+        return "High-risk releases can delay customer commitments and create avoidable rollback risk; feature flags let product and engineering decouple launch exposure from deployment."
+    if "observability" in lower:
+        return "Without baseline reliability and incident metrics, management cannot tell whether scale issues are isolated events or recurring operating constraints."
+    if "delivery cadence" in lower or "okr" in lower:
+        return "Growth plans depend on predictable roadmap execution; reviewing cadence and OKRs exposes delivery commitments that lack capacity, ownership, or measurable outcomes."
+    if "ai pilot" in lower:
+        return "AI experimentation without governance can expose confidential data or create unmanaged model risk; a bounded pilot keeps learning tied to approved data and success criteria."
+    if "capacity planning" in lower:
+        return "A growth-equity plan requires knowing which systems, teams, and cloud costs break under higher customer and usage volume before revenue commitments are made."
+    if "scalability review" in lower:
+        return "Architecture bottlenecks become enterprise-value constraints when customer volume rises; a targeted review identifies the few technical decisions that most affect growth."
+    if "hiring" in lower or "coverage plan" in lower:
+        return "Thin engineering coverage turns roadmap growth into key-person risk; a coverage plan ties hiring to critical systems and delivery constraints."
+    if "cloud cost" in lower or "finops" in lower:
+        return "Cloud spend without allocation hides margin leakage and makes scaling economics hard to defend to investors or the board."
+    if "modernization" in lower:
+        return "Modernization work should target the bottleneck with the largest delivery or reliability impact, avoiding broad technical-debt programs without measurable business value."
+    if "release automation" in lower or "deployment" in lower or "release handoff" in lower:
+        return "Manual or inconsistent release practices increase outage and integration risk; standardizing the workflow makes deployment evidence reviewable and repeatable."
+    if "technical debt" in lower:
+        return "Debt reduction needs an operating backlog tied to incidents, delivery drag, or scalability limits so engineering capacity is spent on business-critical constraints."
+    if "board operating dashboard" in lower:
+        return "The board needs a concise view of delivery, reliability, and risk trends to distinguish execution progress from anecdotal management updates."
+    if "technical workshops" in lower:
+        return "Acquirers need direct evidence from target system owners before integration plans can be trusted; joint workshops surface hidden blockers early."
+    if "parallel runbooks" in lower:
+        return "Critical systems cannot rely on informal knowledge during integration; parallel runbooks preserve continuity while ownership transitions."
+    if "identity" in lower or "access" in lower:
+        return "Identity and privileged access gaps can create Day 1 security exposure; mapping access paths identifies exceptions before systems are connected or handed off."
+    if "data model" in lower or "migration" in lower:
+        return "Data mapping errors can disrupt customers, billing, and reporting; early dependency mapping reduces migration surprises and reconciliation failures."
+    if "support handoff" in lower:
+        return "Customer continuity depends on named support owners and escalation paths on both sides of the transaction before operational responsibility changes."
+    if "knowledge transfer" in lower or "key-person" in lower or "shadow" in lower:
+        return "Key-person dependency creates execution and retention risk; structured shadowing turns individual knowledge into transferable operating evidence."
+    if "blocker" in lower:
+        return "Integration blockers need severity, owner, and decision visibility so unresolved risks do not quietly move into post-close operations."
+    if "readiness rehearsal" in lower:
+        return "A rehearsal tests whether identity, data, support, and deployment plans work together before customers or employees experience the transition."
+    if "spend" in lower:
+        return "Uncontrolled technology spend reduces cash runway and can fund low-value work; an immediate freeze creates time to separate essential spend from waste."
+    if "backup" in lower or "restore" in lower:
+        return "Untested recovery is a material operating risk because management cannot prove service restoration after data loss, outage, or deployment failure."
+    if "production access" in lower:
+        return "Privileged production access without review increases outage, insider, and audit risk; access cleanup creates immediate control evidence."
+    if "vulnerab" in lower:
+        return "Critical vulnerabilities create direct security and customer-trust exposure; triage forces severity, ownership, and deadline decisions."
+    if "cost-control operating cadence" in lower:
+        return "Cost control only sticks when Finance and Engineering review cloud run-rate, exceptions, and savings actions on a recurring cadence."
+    if "production ownership" in lower or "incident roles" in lower:
+        return "Ambiguous production ownership slows incident response and lets urgent remediation drift; named roles make accountability testable."
+    if "stability dashboard" in lower or "mttr" in lower:
+        return "Turnaround execution requires objective stability measures so leadership can see whether incidents, MTTR, and recurring failures are improving."
+    if "stabilization scorecard" in lower:
+        return "The Day 100 board readout should separate completed controls from residual risk, budget decisions, and ownership gaps that still require governance."
+    return f"{action} is required because the diligence evidence points to a specific operating risk that needs named ownership, measurable evidence, and board-visible follow-through."
 
 
 def _scenario_risk_reduction(plan_type: PlanType, action: str) -> str:
-    return f"Reduces {plan_type.replace('_', ' ')} execution risk by creating concrete evidence, ownership, and operating cadence for: {action}."
+    owner = _owner_for_action(action, plan_type)
+    return f"Reduces execution risk by assigning {owner} to produce evidence that the control, handoff, or operating process is working."
 
 
 def _dedupe(values: list[str]) -> list[str]:

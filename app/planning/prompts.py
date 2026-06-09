@@ -25,7 +25,7 @@ PLAN_TYPE_FOCUS: dict[PlanType, list[str]] = {
 
 
 PLAN_TYPE_SUMMARY: dict[PlanType, str] = {
-    "growth_equity": "support growth equity scaling by improving governance, delivery predictability, security, and platform readiness",
+    "growth_equity": "prepare the company for higher customer volume, faster roadmap delivery, stronger governance, and platform readiness",
     "acquisition_integration": "reduce acquisition integration risk through knowledge transfer, identity and deployment standardization, documentation, and support handoff",
     "turnaround": "stabilize operations, reduce urgent technology risk, improve cost control, and clarify ownership",
 }
@@ -34,7 +34,7 @@ PLAN_TYPE_SUMMARY: dict[PlanType, str] = {
 PLAN_TYPE_OUTCOMES: dict[PlanType, list[str]] = {
     "growth_equity": [
         "improve delivery predictability",
-        "support scale",
+        "validate scale assumptions",
         "improve platform leverage",
         "enable growth initiatives",
     ],

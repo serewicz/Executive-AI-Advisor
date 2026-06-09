@@ -185,6 +185,87 @@ def test_100_day_plan_actions_include_deliverables_and_success_metric(monkeypatc
     assert all(action.success_metric for action in all_actions)
 
 
+def test_100_day_plan_rejects_generic_business_rationale_language(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="growth_equity",
+        db=FakeSession(),
+    )
+
+    generic_phrases = [
+        "supports growth equity",
+        "supports acquisition integration",
+        "supports turnaround",
+        "improves technology posture",
+        "supports the growth equity focus",
+        "supports the acquisition integration focus",
+    ]
+    all_actions = [*plan.days_1_30, *plan.days_31_60, *plan.days_61_90, *plan.days_91_100]
+    rationales = [action.business_rationale.lower() for action in all_actions]
+
+    assert not any(phrase in rationale for phrase in generic_phrases for rationale in rationales)
+    assert any("business impact" in rationale for rationale in rationales)
+    assert any("risk rationale" in rationale for rationale in rationales)
+
+
+def test_100_day_plan_deliverables_are_concrete_and_verifiable(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="acquisition_integration",
+        db=FakeSession(),
+    )
+
+    weak_phrases = [
+        "define scope and owner",
+        "create milestone plan",
+        "identify evidence required",
+        "publish status metric",
+    ]
+    all_actions = [*plan.days_1_30, *plan.days_31_60, *plan.days_61_90, *plan.days_91_100]
+    deliverables = [deliverable.lower() for action in all_actions for deliverable in action.deliverables]
+
+    assert not any(phrase in deliverable for phrase in weak_phrases for deliverable in deliverables)
+    assert any("register" in deliverable for deliverable in deliverables)
+    assert any("owner" in deliverable for deliverable in deliverables)
+    assert any("due date" in deliverable or "launch date" in deliverable for deliverable in deliverables)
+
+
+def test_100_day_plan_owner_assignments_are_varied(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="turnaround",
+        db=FakeSession(),
+    )
+
+    all_actions = [*plan.days_1_30, *plan.days_31_60, *plan.days_61_90, *plan.days_91_100]
+    owners = {action.owner for action in all_actions}
+
+    assert len(owners) >= 5
+    assert "CTO" in owners
+    assert "Finance" in owners
+    assert "CISO / Security Lead" in owners
+    assert "Engineering Manager" in owners
+    assert len([action for action in all_actions if action.owner == "CTO"]) < len(all_actions)
+
+
 def test_turnaround_plan_includes_quick_wins_and_stabilization_language(monkeypatch):
     document_set_id = uuid4()
     monkeypatch.setattr(
