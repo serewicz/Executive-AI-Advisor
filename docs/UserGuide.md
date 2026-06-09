@@ -207,9 +207,9 @@ The 100-Day Technology Plan Generator converts Technology Due Diligence Report f
 
 Supported plan types:
 
-- `growth_equity`: scalability, governance, delivery predictability, and security.
-- `acquisition_integration`: knowledge transfer, identity integration, deployment standardization, documentation, and support transition.
-- `turnaround`: risk reduction, cost control, operational stability, and ownership clarity.
+- `growth_equity`: use when a company is preparing to scale. The plan emphasizes scalability, governance, delivery predictability, feature flagging, observability, AI pilot selection, hiring, and FinOps.
+- `acquisition_integration`: use for acquisition or post-close planning. The plan emphasizes acquirer coordination, knowledge transfer, identity and access mapping, data migration mapping, deployment handoff, documentation, and support transition.
+- `turnaround`: use when urgent stabilization is needed. The plan emphasizes immediate risk reduction, non-critical spend freeze, backup and restore validation, key-person shadow sessions, production access review, vulnerability triage, and cost control.
 
 Prioritization:
 
@@ -218,6 +218,15 @@ Prioritization:
 - green findings become days 61-90 or monitoring actions
 
 Outputs include executive summary, phase-based actions, business rationale, owners, risk reduction, citations, success metrics, board checkpoints, dependencies, and limitations. The plan can be downloaded as Markdown.
+
+The plan includes:
+
+- 100-Day Plan at a Glance table
+- Quick Wins for turnaround plans
+- Days 1-30, 31-60, 61-90, and 91-100 board readout sections
+- 2-4 concrete deliverables for each major action
+- a success metric for each action
+- structured board checkpoints with question, evidence requested, and decision needed
 
 ## Citations And Evidence
 

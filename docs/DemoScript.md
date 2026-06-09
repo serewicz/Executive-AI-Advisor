@@ -153,14 +153,14 @@ Good input packets include executive summary, technology assessment, security as
 Choose a plan type:
 
 - `growth_equity` for SampleCo-style scaling plans.
-- `acquisition_integration` for AcquisitionTargetCo-style integration planning.
-- `turnaround` for stabilization and cost-control scenarios.
+- `acquisition_integration` for AcquisitionTargetCo-style integration planning, acquirer coordination, knowledge transfer, identity mapping, data migration, and support transition.
+- `turnaround` for stabilization, immediate risk reduction, spend control, backup validation, production access review, and vulnerability triage.
 
 Click Generate 100-Day Plan.
 
 Talking point:
 
-The plan is generated from the diligence findings, not from a new open-ended chat prompt. Red findings become days 1-30 actions, yellow findings become days 31-60 actions, and green findings become days 61-90 or monitoring actions. Each action keeps citations so management can inspect the source evidence.
+The plan is generated from the diligence findings, not from a new open-ended chat prompt. Red findings become days 1-30 actions, yellow findings become days 31-60 actions, and green findings become days 61-90 or monitoring actions. The output includes a Plan at a Glance, concrete deliverables, success metrics, structured board checkpoints, and citations so management can inspect the source evidence.
 
 ### 6. Generate Board Summary
 

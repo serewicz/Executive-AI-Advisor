@@ -102,9 +102,13 @@ def test_100_day_plan_endpoint_works(monkeypatch):
     assert body["document_set_id"] == str(document_set_id)
     assert body["plan_type"] == "growth_equity"
     assert body["overall_priority"] == "high"
+    assert body["plan_at_a_glance"]
     assert body["days_1_30"]
     assert body["days_31_60"]
     assert body["days_61_90"]
+    assert body["days_91_100"]
+    assert body["board_checkpoints"][0]["question"]
+    assert body["board_checkpoints"][0]["evidence_requested"]
 
 
 def test_100_day_plan_document_set_required():
@@ -139,12 +143,12 @@ def test_100_day_plan_prioritizes_risks(monkeypatch):
         db=FakeSession(),
     )
 
-    assert "key person risk" in plan.days_1_30[0].action
-    assert "cloud cost" in plan.days_31_60[0].action
-    assert "security" in plan.days_61_90[0].action
-    assert plan.days_1_30[0].priority == "high"
-    assert plan.days_31_60[0].priority == "medium"
-    assert plan.days_61_90[0].priority == "low"
+    assert any("key person risk" in action.action for action in plan.days_1_30)
+    assert any("cloud cost" in action.action for action in plan.days_31_60)
+    assert any("security" in action.action for action in plan.days_61_90)
+    assert all(action.priority == "high" for action in plan.days_1_30)
+    assert all(action.priority == "medium" for action in plan.days_31_60)
+    assert all(action.priority == "low" for action in plan.days_61_90)
 
 
 def test_100_day_plan_actions_include_citations(monkeypatch):
@@ -161,6 +165,101 @@ def test_100_day_plan_actions_include_citations(monkeypatch):
     )
 
     assert plan.days_1_30[0].citations
+
+
+def test_100_day_plan_actions_include_deliverables_and_success_metric(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="growth_equity",
+        db=FakeSession(),
+    )
+
+    all_actions = [*plan.days_1_30, *plan.days_31_60, *plan.days_61_90, *plan.days_91_100]
+    assert all(action.deliverables for action in all_actions)
+    assert all(action.success_metric for action in all_actions)
+
+
+def test_turnaround_plan_includes_quick_wins_and_stabilization_language(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="turnaround",
+        db=FakeSession(),
+    )
+
+    assert plan.quick_wins
+    assert any("Freeze non-critical technology spend" in win for win in plan.quick_wins)
+    assert "stop uncontrolled technology spend" in plan.executive_summary
+    assert any("Freeze non-critical technology spend" in action.action for action in plan.days_1_30)
+
+
+def test_growth_equity_plan_includes_scaling_and_delivery_predictability(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="growth_equity",
+        db=FakeSession(),
+    )
+
+    assert "improve delivery predictability" in plan.executive_summary
+    assert any("feature flag" in action.action.lower() for action in plan.days_1_30)
+    assert any("architecture scalability review" in action.action.lower() for action in plan.days_31_60)
+    assert any("Deployment frequency improves" in metric for metric in plan.success_metrics)
+
+
+def test_acquisition_integration_plan_includes_acquirer_coordination(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="acquisition_integration",
+        db=FakeSession(),
+    )
+
+    assert "transfer critical knowledge" in plan.executive_summary
+    assert any("acquirer" in action.action.lower() for action in plan.days_1_30)
+    assert any("Knowledge transfer" in metric for metric in plan.success_metrics)
+    assert any("acquirer-side" in dependency for dependency in plan.dependencies)
+
+
+def test_plan_at_a_glance_and_board_checkpoints_are_structured(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="growth_equity",
+        db=FakeSession(),
+    )
+
+    assert len(plan.plan_at_a_glance) == 4
+    assert plan.plan_at_a_glance[0].timeframe == "Days 1-30"
+    assert all(checkpoint.question for checkpoint in plan.board_checkpoints)
+    assert all(checkpoint.evidence_requested for checkpoint in plan.board_checkpoints)
+    assert all(checkpoint.decision_needed for checkpoint in plan.board_checkpoints)
 
 
 def test_100_day_plan_markdown_export_works(monkeypatch):
@@ -182,7 +281,27 @@ def test_100_day_plan_markdown_export_works(monkeypatch):
     assert "## Days 1-30" in markdown
     assert "## Days 31-60" in markdown
     assert "## Days 61-90" in markdown
+    assert "## Days 91-100 / Board Readout" in markdown
+    assert "## 100-Day Plan at a Glance" in markdown
     assert "## Success Metrics" in markdown
     assert "## Board Checkpoints" in markdown
     assert "## Dependencies" in markdown
     assert "## Limitations" in markdown
+
+
+def test_100_day_plan_markdown_includes_quick_wins_for_turnaround(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+    plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="turnaround",
+        db=FakeSession(),
+    )
+
+    markdown = _build_hundred_day_plan_markdown(plan.model_dump(mode="json"))
+
+    assert "## Quick Wins" in markdown
+    assert "Freeze non-critical technology spend" in markdown

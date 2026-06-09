@@ -658,11 +658,15 @@ def _render_hundred_day_plan(plan: dict[str, Any]) -> None:
     st.markdown("#### Executive Summary")
     st.markdown(plan.get("executive_summary", "No executive summary returned."))
 
+    _render_plan_at_a_glance(plan.get("plan_at_a_glance", []))
+    if plan.get("quick_wins"):
+        _render_list("Quick Wins", plan.get("quick_wins", []))
     _render_plan_actions("Days 1-30", plan.get("days_1_30", []))
     _render_plan_actions("Days 31-60", plan.get("days_31_60", []))
     _render_plan_actions("Days 61-90", plan.get("days_61_90", []))
+    _render_plan_actions("Days 91-100 / Board Readout", plan.get("days_91_100", []))
     _render_list("Success Metrics", plan.get("success_metrics", []))
-    _render_list("Board Checkpoints", plan.get("board_checkpoints", []))
+    _render_board_checkpoints(plan.get("board_checkpoints", []))
     _render_list("Dependencies", plan.get("dependencies", []))
     _render_limitations(plan.get("limitations", []))
 
@@ -687,12 +691,47 @@ def _render_plan_actions(title: str, actions: list[dict[str, Any]]) -> None:
         st.markdown(f"##### {index}. {action.get('action', '')}")
         st.caption(f"Priority: {str(action.get('priority', '')).title()} | Owner: {action.get('owner', '')}")
         st.markdown(f"**Business rationale:** {action.get('business_rationale', '')}")
+        _render_list("Deliverables", action.get("deliverables", []))
+        st.markdown(f"**Success metric:** {action.get('success_metric', '')}")
         st.markdown(f"**Risk reduction:** {action.get('risk_reduction', '')}")
         _render_citations(
             action.get("citations", []),
             title=f"{title} Action {index} Evidence",
             use_expanders=False,
         )
+
+
+def _render_plan_at_a_glance(rows: list[dict[str, Any]]) -> None:
+    st.markdown("#### 100-Day Plan at a Glance")
+    if not rows:
+        st.markdown("No plan summary returned.")
+        return
+    st.table(
+        [
+            {
+                "Timeframe": row.get("timeframe", ""),
+                "Primary Objective": row.get("primary_objective", ""),
+                "Key Actions": row.get("key_actions", ""),
+                "Success Measures": row.get("success_measures", ""),
+                "Risk Reduced": row.get("risk_reduced", ""),
+            }
+            for row in rows
+        ]
+    )
+
+
+def _render_board_checkpoints(checkpoints: list[dict[str, Any]]) -> None:
+    st.markdown("#### Board Checkpoints")
+    if not checkpoints:
+        st.markdown("None provided.")
+        return
+    for checkpoint in checkpoints:
+        st.markdown(f"##### {checkpoint.get('timeframe', '')}")
+        st.markdown(f"**Question for management:** {checkpoint.get('question', '')}")
+        st.markdown(f"**Evidence requested:** {checkpoint.get('evidence_requested', '')}")
+        decision = checkpoint.get("decision_needed")
+        if decision:
+            st.markdown(f"**Decision needed:** {decision}")
 
 
 def _render_evaluation_section() -> None:
@@ -1526,14 +1565,46 @@ def _build_hundred_day_plan_markdown(plan: dict[str, Any]) -> str:
         plan.get("executive_summary", ""),
         "",
     ]
+    lines.extend(_markdown_plan_at_a_glance(plan.get("plan_at_a_glance", [])))
+    if plan.get("quick_wins"):
+        lines.extend(_markdown_list("Quick Wins", plan.get("quick_wins", [])))
     lines.extend(_markdown_plan_actions("Days 1-30", plan.get("days_1_30", [])))
     lines.extend(_markdown_plan_actions("Days 31-60", plan.get("days_31_60", [])))
     lines.extend(_markdown_plan_actions("Days 61-90", plan.get("days_61_90", [])))
+    lines.extend(_markdown_plan_actions("Days 91-100 / Board Readout", plan.get("days_91_100", [])))
     lines.extend(_markdown_list("Success Metrics", plan.get("success_metrics", [])))
-    lines.extend(_markdown_list("Board Checkpoints", plan.get("board_checkpoints", [])))
+    lines.extend(_markdown_board_checkpoints(plan.get("board_checkpoints", [])))
     lines.extend(_markdown_list("Dependencies", plan.get("dependencies", [])))
     lines.extend(_markdown_list("Limitations", plan.get("limitations", [])))
     return "\n".join(lines).strip() + "\n"
+
+
+def _markdown_plan_at_a_glance(rows: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "## 100-Day Plan at a Glance",
+        "",
+        "| Timeframe | Primary Objective | Key Actions | Success Measures | Risk Reduced |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    if not rows:
+        lines.extend(["| None provided. |  |  |  |  |", ""])
+        return lines
+    for row in rows:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    row.get("timeframe", ""),
+                    row.get("primary_objective", ""),
+                    row.get("key_actions", ""),
+                    row.get("success_measures", ""),
+                    row.get("risk_reduced", ""),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
 
 
 def _markdown_plan_actions(title: str, actions: list[dict[str, Any]]) -> list[str]:
@@ -1549,13 +1620,40 @@ def _markdown_plan_actions(title: str, actions: list[dict[str, Any]]) -> list[st
                 f"- Priority: {str(action.get('priority', '')).title()}",
                 f"- Owner: {action.get('owner', '')}",
                 f"- Business Rationale: {action.get('business_rationale', '')}",
+                f"- Success Metric: {action.get('success_metric', '')}",
                 f"- Risk Reduction: {action.get('risk_reduction', '')}",
+                "",
+                "#### Deliverables",
+                "",
+            ]
+        )
+        lines.extend([f"- {deliverable}" for deliverable in action.get("deliverables", [])])
+        lines.extend(
+            [
                 "",
                 "#### Citations",
                 "",
             ]
         )
         lines.extend(_markdown_citations(action.get("citations", []), heading_level="#####"))
+    return lines
+
+
+def _markdown_board_checkpoints(checkpoints: list[dict[str, Any]]) -> list[str]:
+    lines = ["## Board Checkpoints", ""]
+    if not checkpoints:
+        lines.extend(["None provided.", ""])
+        return lines
+    for checkpoint in checkpoints:
+        lines.extend(
+            [
+                f"### {checkpoint.get('timeframe', '')}",
+                f"- Question for management: {checkpoint.get('question', '')}",
+                f"- Evidence requested: {checkpoint.get('evidence_requested', '')}",
+                f"- Decision needed: {checkpoint.get('decision_needed') or 'None specified.'}",
+                "",
+            ]
+        )
     return lines
 
 
