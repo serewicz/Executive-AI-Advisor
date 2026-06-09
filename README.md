@@ -39,9 +39,10 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 - Run technology due diligence assessments
 - Generate technology due diligence reports for active investigations
 - Generate scenario-specific 100-day technology operating plans from diligence findings
+- Review 100-day plan executive one-pagers, timeline summaries, risk heatmaps, deliverables, owners, and board checkpoints
 - Generate board summaries with citations, confidence, and limitations
 - Render workflows in Streamlit without raw JSON
-- Export board memos, diligence reports, 100-day plans, and evaluation reports as Markdown
+- Export board memos, diligence reports, executive one-pagers, 100-day plans, and evaluation reports as Markdown
 - Run deterministic evaluation for citation quality, groundedness, relevance, and executive usefulness
 
 ## Quick Start
@@ -106,11 +107,26 @@ Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:
 6. Search with pgvector inside the selected investigation by default.
 7. Generate cited Q&A or board memos.
 8. Run technology due diligence assessments.
-9. Generate technology due diligence reports with risk ratings and 30/60/90-day actions.
-10. Generate scenario-specific 100-day technology operating plans with deliverables, board checkpoints, and Markdown export.
+9. Generate technology due diligence reports with risk ratings, confidence levels, risk heatmaps, and 30/60/90-day actions.
+10. Generate scenario-specific 100-day technology operating plans with an executive one-pager, timeline summary, risk heatmap, deliverables, board checkpoints, and Markdown export.
 11. Evaluate output quality and store evaluation runs.
 
 See [Architecture](docs/Architecture.md) for the full system design.
+
+## Executive Planning Outputs
+
+100-Day Technology Plans are generated from Technology Due Diligence Report findings. The plan types are scenario-specific:
+
+- `growth_equity`: scale readiness, governance, delivery predictability, security, AI governance, hiring coverage, and FinOps.
+- `acquisition_integration`: acquirer coordination, knowledge transfer, identity mapping, data migration readiness, deployment handoff, documentation, and support transition.
+- `turnaround`: urgent stabilization, spend control, backup validation, production access review, vulnerability triage, production ownership, and operating discipline.
+
+Streamlit renders the plan in two tabs:
+
+- Executive One-Pager: concise board-readable current state, target state, top priorities, first 30 days, board decisions, success metrics, and dependencies.
+- Full 100-Day Plan: timeline summary, plan at a glance, risk heatmap, phase-based actions, deliverables, success metrics, citations, board checkpoints, dependencies, and limitations.
+
+Risk and confidence scoring are shown in the Technology Due Diligence Report and carried into the 100-day plan risk heatmap. The heatmap includes category, risk rating, confidence, evidence count, and primary recommended action. Markdown downloads are available for the executive one-pager, full 100-day plan, diligence report, board memo, and evaluation report.
 
 ## Database Migrations
 
@@ -137,6 +153,7 @@ Implemented:
 - cited Q&A
 - board summary generation
 - technology due diligence report and 100-day plan generation
+- executive one-pager, timeline summary, and risk heatmap outputs for technology planning
 - Streamlit UI
 - deterministic evaluation framework
 - SLSA provenance and security documentation

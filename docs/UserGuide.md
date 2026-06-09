@@ -101,7 +101,7 @@ What cybersecurity risks are disclosed?
 
 The system retrieves relevant chunks, assigns source labels such as `[S1]`, and produces an answer that should cite material claims.
 
-By default, Streamlit scopes Executive Q&A to the active investigation workspace. If no workspace is active, it can scope to the selected document. Use Search across all documents only when you intentionally want global retrieval. Global search may include documents from other investigations.
+By default, Streamlit scopes Executive Q&A to the active investigation workspace. If no workspace is active, it can scope to the selected document. Use Industry Benchmark / Cross-Investigation Analysis only when you intentionally want global retrieval. Global search may include documents from other investigations and companies, so it is for benchmarking and trend analysis rather than company-specific diligence.
 
 Outputs include:
 
@@ -199,7 +199,17 @@ Confidence levels:
 - `medium`: one or two relevant citations, or evidence is useful but incomplete.
 - `low`: weak, indirect, or limited evidence.
 
-Outputs include executive summary, top risks, category findings, recommended owners, management questions, board discussion points, recommended actions, a 30/60/90-day plan, limitations, and citations with relevant excerpts. The report can be downloaded as Markdown.
+Outputs include executive summary, top risks, an executive risk heatmap, category findings, recommended owners, management questions, board discussion points, recommended actions, a 30/60/90-day plan, limitations, and citations with relevant excerpts. The report can be downloaded as Markdown.
+
+The executive risk heatmap summarizes each diligence category in one table:
+
+- category
+- red/yellow/green risk rating
+- confidence level
+- evidence count
+- primary recommended action
+
+The heatmap is generated from the same scoped diligence findings as the report, so it reflects only the active investigation workspace.
 
 ## 100-Day Technology Plan
 
@@ -217,16 +227,70 @@ Prioritization:
 - yellow findings become days 31-60 actions
 - green findings become days 61-90 or monitoring actions
 
-Outputs include executive summary, phase-based actions, business rationale, owners, risk reduction, citations, success metrics, board checkpoints, dependencies, and limitations. The plan can be downloaded as Markdown.
+Outputs include executive summary, executive one-pager, timeline summary, risk heatmap, phase-based actions, business rationale, owners, risk reduction, citations, success metrics, board checkpoints, dependencies, and limitations. The plan can be downloaded as Markdown.
 
 The plan includes:
 
+- Executive One-Pager tab for board-readable review
+- Timeline Summary table showing Stabilize, Govern, Modernize, and Board Readout phases
+- Executive Risk Heatmap table with category, risk rating, confidence, evidence count, and primary action
 - 100-Day Plan at a Glance table
 - Quick Wins for turnaround plans
 - Days 1-30, 31-60, 61-90, and 91-100 board readout sections
 - 2-4 concrete deliverables for each major action
 - a success metric for each action
 - structured board checkpoints with question, evidence requested, and decision needed
+
+### Executive One-Pager
+
+The Executive One-Pager is a concise view derived from the full 100-day plan. It is designed for board packets, sponsor updates, and management readouts. It includes:
+
+- executive summary
+- current state
+- target state
+- overall risk
+- top 5 priorities
+- first 30 days
+- days 31-60
+- days 61-90
+- board decisions required
+- success metrics
+- key dependencies
+
+The one-pager is available as a separate Streamlit tab and has its own Markdown download.
+
+### Timeline Summary
+
+The Timeline Summary shows how work is sequenced:
+
+| Phase | Purpose |
+| --- | --- |
+| Days 1-30: Stabilize | Address the most urgent risks and create operating evidence. |
+| Days 31-60: Govern | Add ownership, cadence, controls, and management discipline. |
+| Days 61-90: Modernize | Convert remediation into operating leverage and durable improvements. |
+| Days 91-100: Board Readout | Summarize completed work, residual risk, dependencies, and decisions required. |
+
+Each phase includes a primary objective, key actions, expected outcomes, risk reduced, and board checkpoint.
+
+### Scenario-Specific Plan Types
+
+The plan language changes by scenario:
+
+- `growth_equity` emphasizes scale readiness, delivery predictability, platform leverage, feature flags, observability, hiring coverage, AI governance, and FinOps.
+- `acquisition_integration` emphasizes acquirer coordination, knowledge transfer, identity integration, data migration readiness, support handoff, documentation, and post-close continuity.
+- `turnaround` emphasizes urgent stabilization, spend control, backup validation, privileged access review, vulnerability triage, production ownership, and operational discipline.
+
+### Markdown Export
+
+The Streamlit UI supports Markdown downloads for:
+
+- Executive One-Pager
+- full 100-Day Technology Plan
+- Technology Due Diligence Report
+- Board Summary
+- Evaluation Report
+
+Markdown exports are plain text and include the structured tables where applicable. They do not include raw JSON.
 
 ## Citations And Evidence
 

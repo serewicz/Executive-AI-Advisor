@@ -54,7 +54,7 @@ Create one workspace per company or deal before uploading documents. For example
 - `FinTechCo Diligence`
 - `AcquisitionTargetCo Diligence`
 
-The active workspace is the default analysis scope. Previous company documents are excluded unless Search across all documents is explicitly selected.
+The active workspace is the default analysis scope. Previous company documents are excluded unless Industry Benchmark / Cross-Investigation Analysis is explicitly selected.
 
 ## Synthetic Demo Datasets
 
@@ -130,7 +130,7 @@ Talking point:
 
 Retrieval and generation are separated. The system first retrieves relevant evidence, then uses those sources to produce a cited answer.
 
-Leave Search across all documents unchecked for investigation-scoped Q&A. Turn it on only when demonstrating global retrieval across multiple uploaded documents.
+Leave Industry Benchmark / Cross-Investigation Analysis unchecked for investigation-scoped Q&A. Turn it on only when demonstrating benchmarking or trend analysis across multiple uploaded investigations.
 
 ### 4. Generate Technology Due Diligence Report
 
@@ -138,13 +138,22 @@ Click Generate Technology Due Diligence Report for the active investigation.
 
 Talking point:
 
-The report is not a chatbot answer. It is a structured diligence artifact scoped to the selected company workspace. It retrieves evidence by category, assigns red/yellow/green risk ratings, shows confidence, identifies recommended owners, and produces management questions, board discussion points, and a 30/60/90-day plan.
+The report is not a chatbot answer. It is a structured diligence artifact scoped to the selected company workspace. It retrieves evidence by category, assigns red/yellow/green risk ratings, shows confidence, identifies recommended owners, and produces management questions, board discussion points, an executive risk heatmap, and a 30/60/90-day plan.
 
 Explain the ratings:
 
 - Red means material risk with stronger evidence or business impact.
 - Yellow means manageable risk that needs validation or monitoring.
 - Green means limited evidence of concern based on retrieved documents.
+- Confidence indicates evidence strength. High confidence means stronger or broader citation support; medium means useful but incomplete support; low means weak, indirect, or limited evidence.
+
+Show the Executive Risk Heatmap:
+
+- Category shows the diligence area.
+- Risk Rating shows red/yellow/green status.
+- Confidence shows evidence strength.
+- Evidence Count shows how many cited passages support the row.
+- Primary Recommended Action gives the management action to validate or remediate the risk.
 
 Good input packets include executive summary, technology assessment, security assessment, engineering organization review, AI readiness assessment, roadmap, cloud cost analysis, and integration readiness materials.
 
@@ -160,7 +169,41 @@ Click Generate 100-Day Plan.
 
 Talking point:
 
-The plan is generated from the diligence findings, not from a new open-ended chat prompt. Red findings become days 1-30 actions, yellow findings become days 31-60 actions, and green findings become days 61-90 or monitoring actions. The output includes a Plan at a Glance, concrete deliverables, success metrics, structured board checkpoints, and citations so management can inspect the source evidence.
+The plan is generated from the diligence findings, not from a new open-ended chat prompt. Red findings become days 1-30 actions, yellow findings become days 31-60 actions, and green findings become days 61-90 or monitoring actions.
+
+Review the Executive One-Pager tab first:
+
+- current state
+- target state
+- overall risk
+- top 5 priorities
+- first 30 days
+- board decisions required
+- success metrics
+- key dependencies
+
+Talking point:
+
+The one-pager is the board-readable view. It hides raw JSON and compresses the operating plan into the sections a sponsor, CTO, or director would review first.
+
+Review the Timeline Summary:
+
+- Days 1-30: Stabilize
+- Days 31-60: Govern
+- Days 61-90: Modernize
+- Days 91-100: Board Readout
+
+Talking point:
+
+The timeline explains sequencing. The plan starts with urgent risk containment, then adds governance, then moves into modernization, and ends with a board readout on residual risk and decisions required.
+
+Review the Risk Heatmap:
+
+The same category heatmap from the diligence report carries into the 100-day plan, so the audience can see which categories are red, yellow, or green and how much evidence supports each row.
+
+Open the Full 100-Day Plan tab:
+
+The full output includes a Timeline Summary, Plan at a Glance, Risk Heatmap, concrete deliverables, success metrics, structured board checkpoints, dependencies, limitations, and citations so management can inspect the source evidence.
 
 ### 6. Generate Board Summary
 
@@ -194,13 +237,13 @@ Talking point:
 
 Evaluation is currently single-document. It is part of trust, not an afterthought. The system scores citation quality, groundedness, relevance, and executive usefulness.
 
-### 9. Export Markdown Memo
+### 9. Export Markdown Outputs
 
-Use Download Board Memo.md, Download Technology Due Diligence Report.md, Download 100-Day Technology Plan.md, or Download Evaluation Report.md.
+Use Download Board Memo.md, Download Technology Due Diligence Report.md, Download Executive One-Pager.md, Download 100-Day Technology Plan.md, or Download Evaluation Report.md.
 
 Talking point:
 
-Outputs are designed to move into executive workflows, board prep, diligence notes, or review packets.
+Outputs are designed to move into executive workflows, board prep, diligence notes, or review packets. Markdown exports preserve the one-pager, timeline, heatmap, board checkpoints, citations, and limitations without exposing raw JSON.
 
 ## Suggested Talking Points
 
@@ -233,6 +276,8 @@ Highlight:
 
 - faster document triage
 - board-level risk summaries
+- one-page planning summary for sponsor or board review
+- timeline and heatmap views for quick prioritization
 - cited diligence evidence
 - repeatable evaluation
 - exportable memos
@@ -245,6 +290,9 @@ Highlight:
 - source-grounded summaries
 - board questions
 - recommended actions
+- executive one-pager
+- risk heatmap
+- timeline summary
 - limitations and confidence
 - ability to inspect evidence
 - no claim should be accepted without citation
