@@ -38,6 +38,7 @@ from app.diligence.scoring import (
     risk_rationale_for_category,
     score_assessment,
 )
+from app.core.config import settings
 from app.models.document import Document, DocumentChunk, DocumentSet, DocumentSetDocument
 from app.retrieval.evidence import extract_relevant_excerpt, is_low_value_chunk, relevance_reason
 from app.retrieval.vector_search import SearchResult, search_similar_chunks
@@ -117,6 +118,9 @@ def generate_technology_due_diligence_report(
     db: Session,
     top_k: int = 20,
     include_100_day_plan: bool = True,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_api_key: str | None = None,
 ) -> TechnologyDiligenceReport:
     document_set = db.get(DocumentSet, document_set_id)
     if document_set is None:
@@ -142,7 +146,12 @@ def generate_technology_due_diligence_report(
     ]
     risk_ratings = [finding.risk_rating for finding in findings]
     confidences = [finding.confidence for finding in findings]
-    provider_draft = _draft_report_with_provider(all_results[: min(top_k, 20)])
+    provider_draft = _draft_report_with_provider(
+        all_results[: min(top_k, 20)],
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
+    )
 
     return TechnologyDiligenceReport(
         document_set_id=document_set.id,
@@ -194,7 +203,12 @@ def _retrieve_report_results_by_category(
     return results_by_category
 
 
-def _draft_report_with_provider(results: list[SearchResult]):
+def _draft_report_with_provider(
+    results: list[SearchResult],
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_api_key: str | None = None,
+):
     source_contexts = [
         SourceContext(
             label=f"[S{index}]",
@@ -205,11 +219,15 @@ def _draft_report_with_provider(results: list[SearchResult]):
         )
         for index, result in enumerate(results, start=1)
     ]
-    provider = get_llm_provider()
+    provider = get_llm_provider(llm_provider)
     return provider.generate_technology_diligence_report(
         sources=source_contexts,
         system_prompt=TECHNOLOGY_DILIGENCE_SYSTEM_PROMPT,
         user_prompt=build_technology_report_prompt(source_contexts),
+        api_key_override=llm_api_key,
+        model_override=llm_model,
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
     )
 
 

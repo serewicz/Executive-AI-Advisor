@@ -8,6 +8,7 @@ from app.schemas.document import DocumentClassification, DocumentSourceType
 
 
 Confidence = Literal["high", "medium", "low"]
+LLMProviderName = Literal["mock", "openai", "anthropic", "grok"]
 SummaryType = Literal[
     "technology_risk",
     "diligence_summary",
@@ -17,7 +18,13 @@ SummaryType = Literal[
 ]
 
 
-class AdvisorAskRequest(BaseModel):
+class LLMProviderOptions(BaseModel):
+    llm_provider: LLMProviderName | None = None
+    llm_model: str | None = Field(default=None, max_length=120)
+    llm_api_key: str | None = None
+
+
+class AdvisorAskRequest(LLMProviderOptions):
     question: str = Field(min_length=1, max_length=settings.max_search_query_chars)
     top_k: int = Field(default=5, ge=1, le=20)
     document_id: UUID | None = None
@@ -70,7 +77,7 @@ class BoardMemo(BaseModel):
     limitations: list[str]
 
 
-class BoardSummaryRequest(BaseModel):
+class BoardSummaryRequest(LLMProviderOptions):
     document_id: UUID | None = None
     document_set_id: UUID | None = None
     summary_type: SummaryType

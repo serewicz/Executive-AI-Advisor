@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.advisor.schemas import Citation
+from app.advisor.schemas import Citation, LLMProviderOptions
 from app.diligence.schemas import RiskHeatmapRow
 
 
@@ -11,7 +11,7 @@ PlanType = Literal["growth_equity", "acquisition_integration", "turnaround"]
 PlanPriority = Literal["high", "medium", "low"]
 
 
-class HundredDayPlanRequest(BaseModel):
+class HundredDayPlanRequest(LLMProviderOptions):
     document_set_id: UUID
     plan_type: PlanType = "growth_equity"
 

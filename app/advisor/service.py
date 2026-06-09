@@ -20,6 +20,7 @@ from app.advisor.schemas import (
     Citation,
     SummaryType,
 )
+from app.core.config import settings
 from app.models.document import Document, DocumentChunk, DocumentSet, DocumentSetDocument
 from app.retrieval.evidence import (
     extract_relevant_excerpt,
@@ -45,6 +46,9 @@ def answer_executive_question(
     classification: str | None = None,
     document_id: UUID | None = None,
     document_set_id: UUID | None = None,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_api_key: str | None = None,
 ) -> AdvisorAskResponse:
     scope = "document" if document_id is not None else "document_set" if document_set_id is not None else "global"
     if document_id is not None and db.get(Document, document_id) is None:
@@ -85,12 +89,16 @@ def answer_executive_question(
             document_set_id=document_set_id,
         )
 
-    provider = get_llm_provider()
+    provider = get_llm_provider(llm_provider)
     llm_response = provider.answer_question(
         question=question,
         sources=source_contexts,
         system_prompt=SYSTEM_PROMPT,
         user_prompt=build_user_prompt(question, source_contexts),
+        api_key_override=llm_api_key,
+        model_override=llm_model,
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
     )
 
     limitations = llm_response.limitations or []
@@ -112,9 +120,20 @@ def generate_board_summary(
     top_k: int,
     db: Session,
     document_set_id: UUID | None = None,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_api_key: str | None = None,
 ) -> BoardSummaryResponse:
     if document_id is not None:
-        return _generate_document_board_summary(document_id=document_id, summary_type=summary_type, top_k=top_k, db=db)
+        return _generate_document_board_summary(
+            document_id=document_id,
+            summary_type=summary_type,
+            top_k=top_k,
+            db=db,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            llm_api_key=llm_api_key,
+        )
 
     if document_set_id is None:
         raise AdvisorValidationError("Either document_id or document_set_id is required.")
@@ -132,6 +151,9 @@ def generate_board_summary(
         summary_type=summary_type,
         document_set_id=document_set.id,
         scope="document_set",
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
     )
 
 
@@ -140,6 +162,9 @@ def _generate_document_board_summary(
     summary_type: SummaryType,
     top_k: int,
     db: Session,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_api_key: str | None = None,
 ) -> BoardSummaryResponse:
     document = db.get(Document, document_id)
     if document is None:
@@ -157,6 +182,9 @@ def _generate_document_board_summary(
         summary_type=summary_type,
         document_id=document.id,
         scope="document",
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
     )
 
 
@@ -166,6 +194,9 @@ def _build_board_summary_response(
     scope: str,
     document_id: UUID | None = None,
     document_set_id: UUID | None = None,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_api_key: str | None = None,
 ) -> BoardSummaryResponse:
 
     source_contexts = [
@@ -180,12 +211,16 @@ def _build_board_summary_response(
     ]
     citations = _build_citations(results, SUMMARY_TYPE_QUERIES[summary_type])
 
-    provider = get_llm_provider()
+    provider = get_llm_provider(llm_provider)
     llm_response = provider.generate_board_summary(
         summary_type=summary_type,
         sources=source_contexts,
         system_prompt=BOARD_SUMMARY_SYSTEM_PROMPT,
         user_prompt=build_board_summary_prompt(summary_type, source_contexts),
+        api_key_override=llm_api_key,
+        model_override=llm_model,
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
     )
 
     return BoardSummaryResponse(

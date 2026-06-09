@@ -46,12 +46,28 @@ class SourceContext:
 
 class LLMProvider(ABC):
     @abstractmethod
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 4000,
+        api_key_override: str | None = None,
+        model_override: str | None = None,
+    ) -> str:
+        pass
+
+    @abstractmethod
     def answer_question(
         self,
         question: str,
         sources: list[SourceContext],
         system_prompt: str,
         user_prompt: str,
+        api_key_override: str | None = None,
+        model_override: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4000,
     ) -> LLMResponse:
         pass
 
@@ -62,6 +78,10 @@ class LLMProvider(ABC):
         sources: list[SourceContext],
         system_prompt: str,
         user_prompt: str,
+        api_key_override: str | None = None,
+        model_override: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4000,
     ) -> BoardMemoResponse:
         pass
 
@@ -71,5 +91,9 @@ class LLMProvider(ABC):
         sources: list[SourceContext],
         system_prompt: str,
         user_prompt: str,
+        api_key_override: str | None = None,
+        model_override: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4000,
     ) -> TechnologyDiligenceDraftResponse:
         pass

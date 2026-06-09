@@ -59,6 +59,14 @@ For a step-by-step executive demo, use:
 
 Executive AI Advisor is currently safe for a local executive demo on your own machine. It is not ready to expose publicly. Before hosting it on a shared network or public URL, add authentication, lock down the database port, set `APP_DEBUG=false`, run Uvicorn without `--reload`, and protect or disable public API docs.
 
+Mock is the default LLM provider. OpenAI, Anthropic, and Grok/xAI keys must be supplied through environment variables or the Streamlit password input for local demo sessions. Never commit keys to the repository.
+
+Run the lightweight tracked-file secret scan before commits:
+
+```bash
+python scripts/check_no_secrets.py
+```
+
 Short version:
 
 ```bash

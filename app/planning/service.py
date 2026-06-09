@@ -20,12 +20,18 @@ def generate_100_day_plan(
     document_set_id: UUID,
     plan_type: PlanType,
     db: Session,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_api_key: str | None = None,
 ) -> HundredDayPlanResponse:
     report = generate_technology_due_diligence_report(
         document_set_id=document_set_id,
         top_k=24,
         include_100_day_plan=True,
         db=db,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
     )
 
     red_findings = [finding for finding in report.findings if finding.risk_rating == "red"]

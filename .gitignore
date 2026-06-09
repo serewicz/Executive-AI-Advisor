@@ -1,4 +1,9 @@
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.secret
 .DS_Store
 __pycache__/
 *.py[cod]

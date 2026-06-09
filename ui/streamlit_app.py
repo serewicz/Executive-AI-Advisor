@@ -25,6 +25,18 @@ SUMMARY_TYPES = [
     "security_governance",
     "board_brief",
 ]
+LLM_PROVIDER_OPTIONS = {
+    "mock": "Mock",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "grok": "Grok / xAI",
+}
+DEFAULT_LLM_MODELS = {
+    "mock": "mock",
+    "openai": "gpt-4o-mini",
+    "anthropic": "claude-3-5-sonnet-latest",
+    "grok": "grok-4.3",
+}
 LOCAL_UI_STATE_KEYS = [
     "document_id",
     "summary_document_id",
@@ -42,6 +54,12 @@ LOCAL_UI_STATE_KEYS = [
     "evaluation_response",
     "evaluation_questions_text",
     "evaluation_questions_initialized",
+    "active_llm_provider",
+    "active_llm_model",
+    "active_llm_api_key",
+    "openai_api_key",
+    "anthropic_api_key",
+    "xai_api_key",
 ]
 
 
@@ -49,6 +67,7 @@ def main() -> None:
     st.set_page_config(page_title="Executive AI Advisor", layout="wide")
     _initialize_state()
     _apply_styles()
+    _render_llm_provider_sidebar()
 
     st.title("Executive AI Advisor")
     st.caption("Board-facing document intelligence demo")
@@ -97,6 +116,12 @@ def _initialize_state() -> None:
         "evaluation_response": None,
         "evaluation_questions_text": "",
         "evaluation_questions_initialized": False,
+        "active_llm_provider": "mock",
+        "active_llm_model": DEFAULT_LLM_MODELS["mock"],
+        "active_llm_api_key": "",
+        "openai_api_key": "",
+        "anthropic_api_key": "",
+        "xai_api_key": "",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -123,6 +148,96 @@ def _apply_styles() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def _render_llm_provider_sidebar() -> None:
+    with st.sidebar:
+        st.header("LLM Provider")
+        provider_keys = list(LLM_PROVIDER_OPTIONS.keys())
+        current_provider = st.session_state.active_llm_provider
+        selected_provider = st.selectbox(
+            "Provider",
+            provider_keys,
+            index=provider_keys.index(current_provider) if current_provider in provider_keys else 0,
+            format_func=lambda value: LLM_PROVIDER_OPTIONS[value],
+            key="llm_provider_select",
+        )
+        if selected_provider != st.session_state.active_llm_provider:
+            st.session_state.active_llm_provider = selected_provider
+            st.session_state.active_llm_model = DEFAULT_LLM_MODELS[selected_provider]
+            st.session_state.active_llm_api_key = _session_key_for_provider(selected_provider)
+
+        model = st.text_input(
+            "Model",
+            value=st.session_state.active_llm_model or DEFAULT_LLM_MODELS[selected_provider],
+            key=f"llm_model_input_{selected_provider}",
+        )
+        st.session_state.active_llm_model = model.strip() or DEFAULT_LLM_MODELS[selected_provider]
+
+        st.warning(
+            "Session-entered keys are kept in local Streamlit session state and are not saved by the app. "
+            "Do not commit keys to Git."
+        )
+        entered_key = st.text_input("API key", type="password", key=f"llm_api_key_input_{selected_provider}")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Use session key", use_container_width=True):
+                if selected_provider == "mock":
+                    st.info("Mock provider does not require an API key.")
+                elif entered_key:
+                    _store_session_key(selected_provider, entered_key)
+                    st.success("API key loaded for this Streamlit session.")
+                else:
+                    st.warning("Enter an API key before loading it into the session.")
+        with col2:
+            if st.button("Clear API Keys", use_container_width=True):
+                _clear_session_api_keys()
+                st.success("Session API keys cleared.")
+
+        if selected_provider == "mock":
+            st.caption("Provider: Mock, no key required")
+        elif _session_key_for_provider(selected_provider):
+            st.caption(f"Provider: {LLM_PROVIDER_OPTIONS[selected_provider]}, key loaded in session")
+        else:
+            st.caption(f"Provider: {LLM_PROVIDER_OPTIONS[selected_provider]}, using environment key if configured")
+
+
+def _store_session_key(provider: str, api_key: str) -> None:
+    key = api_key.strip()
+    if provider == "openai":
+        st.session_state.openai_api_key = key
+    elif provider == "anthropic":
+        st.session_state.anthropic_api_key = key
+    elif provider == "grok":
+        st.session_state.xai_api_key = key
+    st.session_state.active_llm_api_key = key
+
+
+def _session_key_for_provider(provider: str) -> str:
+    if provider == "openai":
+        return st.session_state.get("openai_api_key", "")
+    if provider == "anthropic":
+        return st.session_state.get("anthropic_api_key", "")
+    if provider == "grok":
+        return st.session_state.get("xai_api_key", "")
+    return ""
+
+
+def _clear_session_api_keys() -> None:
+    for key in ["openai_api_key", "anthropic_api_key", "xai_api_key", "active_llm_api_key"]:
+        st.session_state[key] = ""
+
+
+def _generation_provider_payload() -> dict[str, Any]:
+    provider = st.session_state.get("active_llm_provider", "mock")
+    payload: dict[str, Any] = {
+        "llm_provider": provider,
+        "llm_model": st.session_state.get("active_llm_model") or DEFAULT_LLM_MODELS.get(provider),
+    }
+    api_key = _session_key_for_provider(provider)
+    if provider != "mock" and api_key:
+        payload["llm_api_key"] = api_key
+    return payload
 
 
 def _render_workspace_section() -> None:
@@ -425,6 +540,7 @@ def _build_qa_payload(
         payload["document_set_id"] = document_set_id
     elif document_id and not search_globally:
         payload["document_id"] = document_id
+    payload.update(_generation_provider_payload())
     return payload
 
 
@@ -453,6 +569,7 @@ def _render_board_summary_section() -> None:
             payload["document_set_id"] = document_set_id
         else:
             payload["document_id"] = document_id.strip()
+        payload.update(_generation_provider_payload())
         with st.spinner("Generating board memo"):
             response = _post_json("/advisor/board-summary", payload)
         if response:
@@ -512,6 +629,7 @@ def _render_technology_report_section() -> None:
                     "document_set_id": document_set_id,
                     "top_k": top_k,
                     "include_100_day_plan": include_plan,
+                    **_generation_provider_payload(),
                 },
             )
         if response:
@@ -641,6 +759,7 @@ def _render_hundred_day_plan_section() -> None:
                 {
                     "document_set_id": document_set_id,
                     "plan_type": plan_type,
+                    **_generation_provider_payload(),
                 },
             )
         if response:

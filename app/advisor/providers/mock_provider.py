@@ -8,12 +8,27 @@ from app.advisor.providers.base import (
 
 
 class MockLLMProvider(LLMProvider):
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 4000,
+        api_key_override: str | None = None,
+        model_override: str | None = None,
+    ) -> str:
+        return '{"answer":"Mock provider response for local development.","confidence":"medium","limitations":["No LLM generation was performed."]}'
+
     def answer_question(
         self,
         question: str,
         sources: list[SourceContext],
         system_prompt: str,
         user_prompt: str,
+        api_key_override: str | None = None,
+        model_override: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4000,
     ) -> LLMResponse:
         if not sources:
             return LLMResponse(
@@ -37,6 +52,10 @@ class MockLLMProvider(LLMProvider):
         sources: list[SourceContext],
         system_prompt: str,
         user_prompt: str,
+        api_key_override: str | None = None,
+        model_override: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4000,
     ) -> BoardMemoResponse:
         if not sources:
             return BoardMemoResponse(
@@ -77,6 +96,10 @@ class MockLLMProvider(LLMProvider):
         sources: list[SourceContext],
         system_prompt: str,
         user_prompt: str,
+        api_key_override: str | None = None,
+        model_override: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4000,
     ) -> TechnologyDiligenceDraftResponse:
         if not sources:
             return TechnologyDiligenceDraftResponse(

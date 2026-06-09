@@ -21,6 +21,35 @@ Before hosting Executive AI Advisor on a shared network, public URL, or cloud en
 
 The default Docker Compose stack is intentionally optimized for local development. It publishes FastAPI on `localhost:8000`, Streamlit is run separately on `localhost:8501`, and PostgreSQL is exposed for local developer convenience. Do not treat this configuration as a production deployment profile.
 
+## API Key Handling
+
+Executive AI Advisor supports mock, OpenAI, Anthropic, and Grok/xAI LLM providers. Mock remains the default and does not require external API keys.
+
+For normal deployment, set provider keys with environment variables on the server:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `XAI_API_KEY`
+
+For local demos, Streamlit provides a password input in the LLM Provider sidebar. Keys entered there are stored only in local `st.session_state` for the current Streamlit session. They are sent only to generation endpoints when needed and are not persisted by the application.
+
+Security rules:
+
+- Do not commit API keys to Git.
+- Do not paste API keys into source files, Markdown exports, issue comments, or screenshots.
+- Do not print keys in logs or Streamlit output.
+- Use `.env` for local environment variables; `.env` and `.env.*` are ignored by Git.
+- If a key is accidentally committed, rotate or revoke it immediately and remove it from Git history as appropriate.
+- Use the Streamlit Clear API Keys button after local demos.
+
+Run the tracked-file secret scanner before commits:
+
+```bash
+python scripts/check_no_secrets.py
+```
+
+The scanner is intentionally lightweight. It checks tracked files for common OpenAI, Anthropic, and xAI/Grok key-like strings and non-empty tracked API key assignments. It is not a replacement for hosted secret scanning or pre-receive controls.
+
 ## Software Supply Chain
 
 All release builds are expected to produce verifiable SLSA L3 provenance for the Dockerized RAG service.

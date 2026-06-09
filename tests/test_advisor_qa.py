@@ -4,6 +4,9 @@ from fastapi.testclient import TestClient
 
 from app.advisor.providers.base import LLMError
 from app.advisor.providers.factory import get_llm_provider
+from app.advisor.providers.anthropic_provider import AnthropicChatProvider
+from app.advisor.providers.grok_provider import GrokChatProvider
+from app.advisor.providers.mock_provider import MockLLMProvider
 from app.advisor.providers.openai_provider import OpenAIChatProvider
 from app.core.config import settings
 from app.db.dependencies import get_db
@@ -314,3 +317,65 @@ def test_openai_provider_missing_api_key_raises_only_when_selected(monkeypatch):
         get_llm_provider.cache_clear()
 
     assert isinstance(openai_provider, OpenAIChatProvider)
+
+
+def test_provider_factory_returns_supported_providers(monkeypatch):
+    get_llm_provider.cache_clear()
+
+    assert isinstance(get_llm_provider("mock"), MockLLMProvider)
+    assert isinstance(get_llm_provider("openai"), OpenAIChatProvider)
+    assert isinstance(get_llm_provider("anthropic"), AnthropicChatProvider)
+    assert isinstance(get_llm_provider("grok"), GrokChatProvider)
+
+    get_llm_provider.cache_clear()
+
+
+def test_real_providers_missing_keys_raise_clear_errors(monkeypatch):
+    monkeypatch.setattr(settings, "openai_api_key", None)
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "xai_api_key", None)
+    get_llm_provider.cache_clear()
+
+    checks = [
+        ("openai", "OPENAI_API_KEY"),
+        ("anthropic", "ANTHROPIC_API_KEY"),
+        ("grok", "XAI_API_KEY"),
+    ]
+    for provider_name, expected in checks:
+        provider = get_llm_provider(provider_name)
+        try:
+            provider.generate(system_prompt="system", user_prompt="user")
+        except LLMError as exc:
+            assert expected in str(exc)
+        else:
+            raise AssertionError(f"Expected LLMError for {provider_name}")
+
+    get_llm_provider.cache_clear()
+
+
+def test_advisor_response_does_not_include_llm_api_key(monkeypatch):
+    document_set = make_document_set()
+    session = FakeSession(document_set=document_set)
+    monkeypatch.setattr(
+        "app.advisor.service.search_similar_chunks",
+        lambda **kwargs: [make_search_result(document_id=uuid4())],
+    )
+    app.dependency_overrides[get_db] = override_db_with(session)
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/advisor/ask",
+            json={
+                "question": "What risks are present?",
+                "document_set_id": str(document_set.id),
+                "llm_provider": "mock",
+                "llm_api_key": "test-session-key-should-not-return",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "test-session-key-should-not-return" not in response.text
+    assert "llm_api_key" not in response.json()

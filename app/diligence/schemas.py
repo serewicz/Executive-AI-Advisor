@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.advisor.schemas import Citation, Confidence
+from app.advisor.schemas import Citation, Confidence, LLMProviderOptions
 
 
 AssessmentType = Literal[
@@ -64,7 +64,7 @@ class DiligenceAssessmentResponse(BaseModel):
     limitations: list[str]
 
 
-class TechnologyDiligenceRequest(BaseModel):
+class TechnologyDiligenceRequest(LLMProviderOptions):
     document_set_id: UUID
     top_k: int = Field(default=20, ge=5, le=40)
     include_100_day_plan: bool = True

@@ -26,6 +26,9 @@ def ask_advisor(request: AdvisorAskRequest, db: Session = Depends(get_db)) -> Ad
             document_set_id=request.document_set_id,
             source_type=request.source_type,
             classification=request.classification,
+            llm_provider=request.llm_provider,
+            llm_model=request.llm_model,
+            llm_api_key=request.llm_api_key,
         )
     except AdvisorDocumentNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -46,6 +49,9 @@ def board_summary(request: BoardSummaryRequest, db: Session = Depends(get_db)) -
             summary_type=request.summary_type,
             top_k=request.top_k,
             db=db,
+            llm_provider=request.llm_provider,
+            llm_model=request.llm_model,
+            llm_api_key=request.llm_api_key,
         )
     except AdvisorDocumentNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

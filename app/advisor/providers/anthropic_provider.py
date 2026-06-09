@@ -1,7 +1,3 @@
-import json
-
-from openai import OpenAI, OpenAIError
-
 from app.advisor.providers.base import (
     BoardMemoResponse,
     LLMError,
@@ -10,11 +6,12 @@ from app.advisor.providers.base import (
     SourceContext,
     TechnologyDiligenceDraftResponse,
 )
+from app.advisor.providers.openai_provider import _json_payload, _normalize_confidence, _normalize_list
 from app.core.config import settings
 
 
-class OpenAIChatProvider(LLMProvider):
-    provider_name = "openai"
+class AnthropicChatProvider(LLMProvider):
+    provider_name = "anthropic"
 
     def generate(
         self,
@@ -25,30 +22,37 @@ class OpenAIChatProvider(LLMProvider):
         api_key_override: str | None = None,
         model_override: str | None = None,
     ) -> str:
-        api_key = api_key_override or settings.openai_api_key
+        api_key = api_key_override or settings.anthropic_api_key
         if not api_key:
-            raise LLMError("OPENAI_API_KEY is required when LLM_PROVIDER=openai.")
+            raise LLMError("ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic.")
 
-        client = OpenAI(api_key=api_key)
         try:
-            response = client.chat.completions.create(
-                model=model_override or settings.openai_chat_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
+            from anthropic import Anthropic, AnthropicError
+        except ImportError as exc:
+            raise LLMError("anthropic package is required when LLM_PROVIDER=anthropic.") from exc
+
+        client = Anthropic(api_key=api_key)
+        try:
+            response = client.messages.create(
+                model=model_override or settings.anthropic_chat_model,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-        except OpenAIError as exc:
-            raise LLMError(f"OpenAI chat request failed: {exc}") from exc
+        except AnthropicError as exc:
+            raise LLMError(f"Anthropic chat request failed: {exc}") from exc
         except Exception as exc:
-            raise LLMError(f"LLM generation failed: {exc}") from exc
+            raise LLMError(f"Anthropic generation failed: {exc}") from exc
 
-        content = response.choices[0].message.content
+        text_parts = [
+            getattr(block, "text", "")
+            for block in response.content
+            if getattr(block, "type", "") == "text"
+        ]
+        content = "".join(text_parts).strip()
         if not content:
-            raise LLMError("OpenAI chat response did not include content.")
+            raise LLMError("Anthropic chat response did not include content.")
         return content
 
     def answer_question(
@@ -64,7 +68,7 @@ class OpenAIChatProvider(LLMProvider):
     ) -> LLMResponse:
         payload = _json_payload(
             self.generate(system_prompt, user_prompt, temperature, max_tokens, api_key_override, model_override),
-            "OpenAI chat response was not valid JSON.",
+            "Anthropic chat response was not valid JSON.",
         )
         return LLMResponse(
             answer=str(payload.get("answer", "")).strip(),
@@ -85,12 +89,11 @@ class OpenAIChatProvider(LLMProvider):
     ) -> BoardMemoResponse:
         payload = _json_payload(
             self.generate(system_prompt, user_prompt, temperature, max_tokens, api_key_override, model_override),
-            "OpenAI board summary response was not valid JSON.",
+            "Anthropic board summary response was not valid JSON.",
         )
         memo = payload.get("memo", payload)
         if not isinstance(memo, dict):
-            raise LLMError("OpenAI board summary response did not include a memo object.")
-
+            raise LLMError("Anthropic board summary response did not include a memo object.")
         return BoardMemoResponse(
             executive_summary=str(memo.get("executive_summary", "")).strip(),
             key_risks=_normalize_list(memo.get("key_risks")),
@@ -113,7 +116,7 @@ class OpenAIChatProvider(LLMProvider):
     ) -> TechnologyDiligenceDraftResponse:
         payload = _json_payload(
             self.generate(system_prompt, user_prompt, temperature, max_tokens, api_key_override, model_override),
-            "OpenAI technology diligence report response was not valid JSON.",
+            "Anthropic technology diligence report response was not valid JSON.",
         )
         return TechnologyDiligenceDraftResponse(
             executive_summary=str(payload.get("executive_summary", "")).strip(),
@@ -124,29 +127,3 @@ class OpenAIChatProvider(LLMProvider):
             limitations=_normalize_list(payload.get("limitations")),
             confidence=_normalize_confidence(payload.get("confidence")),
         )
-
-
-def _json_payload(content: str, error_message: str) -> dict:
-    try:
-        payload = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise LLMError(error_message) from exc
-    if not isinstance(payload, dict):
-        raise LLMError(error_message)
-    return payload
-
-
-def _normalize_confidence(value) -> str:
-    confidence = str(value or "low").lower().strip()
-    if confidence in {"high", "medium", "low"}:
-        return confidence
-    return "low"
-
-
-def _normalize_list(value) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    normalized = str(value).strip()
-    return [normalized] if normalized else []
