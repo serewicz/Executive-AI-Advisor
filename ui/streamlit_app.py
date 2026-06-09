@@ -581,6 +581,10 @@ def _render_technology_findings(findings: list[dict[str, Any]]) -> None:
         )
         st.caption(f"Recommended owner: {finding.get('recommended_owner', 'Unassigned')}")
         st.markdown(f"**{finding.get('title', '')}**")
+        st.markdown(f"**Risk rationale:** {finding.get('risk_rationale', 'No risk rationale returned.')}")
+        st.markdown(
+            f"**Confidence rationale:** {finding.get('confidence_rationale', 'No confidence rationale returned.')}"
+        )
         st.markdown(f"**Business impact:** {finding.get('business_impact', '')}")
         st.markdown(f"**Evidence:** {finding.get('evidence_summary', '')}")
         st.markdown(f"**Recommended action:** {finding.get('recommended_action', '')}")
@@ -1371,6 +1375,8 @@ def _build_technology_report_markdown(report: dict[str, Any]) -> str:
                 f"- Risk Rating: {str(finding.get('risk_rating', '')).title()}",
                 f"- Confidence: {str(finding.get('confidence', '')).title()}",
                 f"- Recommended Owner: {finding.get('recommended_owner', '')}",
+                f"- Risk Rationale: {finding.get('risk_rationale', '')}",
+                f"- Confidence Rationale: {finding.get('confidence_rationale', '')}",
                 "",
                 f"**Business Impact:** {finding.get('business_impact', '')}",
                 "",

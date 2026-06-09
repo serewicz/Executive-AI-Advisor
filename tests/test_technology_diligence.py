@@ -3,6 +3,12 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.db.dependencies import get_db
+from app.diligence.scoring import (
+    confidence_for_technology_results,
+    confidence_rationale_for_results,
+    risk_rating_for_category,
+    risk_rationale_for_category,
+)
 from app.main import app
 from app.models.document import DocumentSet
 from app.retrieval.vector_search import SearchResult
@@ -137,6 +143,8 @@ def test_technology_report_findings_include_risk_rating_and_confidence(monkeypat
     finding = response.json()["findings"][0]
     assert finding["risk_rating"] in {"red", "yellow", "green"}
     assert finding["confidence"] in {"high", "medium", "low"}
+    assert finding["risk_rationale"]
+    assert finding["confidence_rationale"]
     assert finding["citations"]
 
 
@@ -197,6 +205,8 @@ def test_technology_report_markdown_export_includes_main_sections():
                 "title": "Moderate Security Risk",
                 "risk_rating": "yellow",
                 "confidence": "medium",
+                "risk_rationale": "Incomplete security governance indicates moderate risk.",
+                "confidence_rationale": "Medium confidence because one citation provides direct evidence.",
                 "recommended_owner": "CISO",
                 "business_impact": "Security gaps may affect enterprise trust.",
                 "evidence_summary": "Evidence was retrieved from security documents.",
@@ -229,3 +239,56 @@ def test_technology_report_markdown_export_includes_main_sections():
     assert "## 30/60/90-Day Plan" in markdown
     assert "## Limitations" in markdown
     assert "## Citations" in markdown
+
+
+def test_founder_dependency_scores_red_with_medium_confidence():
+    result = make_search_result(
+        content="Founder dependency and key person dependency concentrate production knowledge in one executive."
+    )
+
+    assert risk_rating_for_category("key_person_risk", [result]) == "red"
+    assert confidence_for_technology_results([result]) == "medium"
+    assert "material key person risk" in risk_rationale_for_category("key_person_risk", [result])
+
+
+def test_manual_deployment_scores_red():
+    result = make_search_result(
+        content="Manual production deployment creates release risk and a single point of failure."
+    )
+
+    assert risk_rating_for_category("architecture", [result]) == "red"
+
+
+def test_incomplete_documentation_scores_yellow():
+    result = make_search_result(content="Incomplete documentation slows onboarding and operational handoff.")
+
+    assert risk_rating_for_category("technical_debt", [result]) == "yellow"
+
+
+def test_cloud_cost_visibility_gap_scores_yellow():
+    result = make_search_result(content="Cloud cost visibility gaps make AWS spend harder to allocate by customer.")
+
+    assert risk_rating_for_category("cloud_cost", [result]) == "yellow"
+
+
+def test_adequate_monitoring_controls_score_green():
+    result = make_search_result(content="Strong monitoring and documented controls support reliable operations.")
+
+    assert risk_rating_for_category("security", [result]) == "green"
+
+
+def test_weak_evidence_scores_low_confidence():
+    result = make_search_result(content="The team discussed future improvements.")
+
+    assert confidence_for_technology_results([result]) == "low"
+    assert "weak, indirect, or inferred" in confidence_rationale_for_results([result])
+
+
+def test_three_relevant_citations_score_high_confidence():
+    results = [
+        make_search_result(content="Incomplete documentation affects operational handoff."),
+        make_search_result(content="Technical debt slows roadmap delivery."),
+        make_search_result(content="Partial test coverage increases regression risk."),
+    ]
+
+    assert confidence_for_technology_results(results) == "high"

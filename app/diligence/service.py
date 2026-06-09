@@ -30,9 +30,11 @@ from app.diligence.schemas import (
 from app.diligence.scoring import (
     confidence_for_results,
     confidence_for_technology_results,
+    confidence_rationale_for_results,
     overall_confidence,
     overall_risk_rating,
     risk_rating_for_category,
+    risk_rationale_for_category,
     score_assessment,
 )
 from app.models.document import Document, DocumentChunk, DocumentSet, DocumentSetDocument
@@ -328,7 +330,7 @@ def _build_report_finding(
 ) -> TechnologyDiligenceFinding:
     citations = [citation_map[result.chunk_id] for result in results if result.chunk_id in citation_map][:3]
     risk_rating = risk_rating_for_category(category, results)
-    confidence = confidence_for_technology_results(results)
+    confidence = confidence_for_technology_results(results, category)
     label_text = _citation_label_text(citations)
     title = _finding_title(category, risk_rating)
 
@@ -337,6 +339,8 @@ def _build_report_finding(
         title=title,
         risk_rating=risk_rating,
         confidence=confidence,
+        risk_rationale=risk_rationale_for_category(category, results),
+        confidence_rationale=confidence_rationale_for_results(results, category),
         business_impact=_business_impact(category, risk_rating, label_text),
         evidence_summary=_evidence_summary(category, results, label_text),
         recommended_action=_recommended_action(category, risk_rating),

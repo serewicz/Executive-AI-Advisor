@@ -79,6 +79,8 @@ class TechnologyDiligenceFinding(BaseModel):
     title: str
     risk_rating: RiskRating
     confidence: Confidence
+    risk_rationale: str
+    confidence_rationale: str
     business_impact: str
     evidence_summary: str
     recommended_action: str
