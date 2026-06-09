@@ -117,6 +117,7 @@ def test_100_day_plan_endpoint_works(monkeypatch):
     assert body["executive_one_pager"]["executive_summary"]
     assert body["executive_one_pager"]["top_5_priorities"]
     assert body["risk_heatmap"]
+    assert body["timeline_summary"]
     assert body["plan_at_a_glance"]
     assert body["days_1_30"]
     assert body["days_31_60"]
@@ -358,6 +359,61 @@ def test_plan_at_a_glance_and_board_checkpoints_are_structured(monkeypatch):
     assert all(checkpoint.decision_needed for checkpoint in plan.board_checkpoints)
 
 
+def test_timeline_summary_exists_for_all_plan_types(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    for plan_type in ["growth_equity", "acquisition_integration", "turnaround"]:
+        plan = generate_100_day_plan(
+            document_set_id=document_set_id,
+            plan_type=plan_type,
+            db=FakeSession(),
+        )
+
+        assert [row.phase for row in plan.timeline_summary] == [
+            "Days 1-30: Stabilize",
+            "Days 31-60: Govern",
+            "Days 61-90: Modernize",
+            "Days 91-100: Board Readout",
+        ]
+        assert all(row.primary_objective for row in plan.timeline_summary)
+        assert all(row.key_actions for row in plan.timeline_summary)
+        assert all(row.expected_outcomes for row in plan.timeline_summary)
+        assert all(row.risk_reduced for row in plan.timeline_summary)
+        assert all(row.board_checkpoint for row in plan.timeline_summary)
+
+
+def test_timeline_summary_preserves_scenario_specific_wording(monkeypatch):
+    document_set_id = uuid4()
+    monkeypatch.setattr(
+        "app.planning.service.generate_technology_due_diligence_report",
+        lambda **kwargs: make_report(document_set_id),
+    )
+
+    growth_plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="growth_equity",
+        db=FakeSession(),
+    )
+    integration_plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="acquisition_integration",
+        db=FakeSession(),
+    )
+    turnaround_plan = generate_100_day_plan(
+        document_set_id=document_set_id,
+        plan_type="turnaround",
+        db=FakeSession(),
+    )
+
+    assert "scale" in growth_plan.timeline_summary[0].primary_objective.lower()
+    assert "acquirer" in integration_plan.timeline_summary[0].key_actions.lower()
+    assert "spend freeze" in turnaround_plan.timeline_summary[0].key_actions.lower()
+
+
 def test_executive_one_pager_exists_for_all_plan_types(monkeypatch):
     document_set_id = uuid4()
     monkeypatch.setattr(
@@ -423,6 +479,7 @@ def test_100_day_plan_markdown_export_works(monkeypatch):
 
     assert "# 100-Day Technology Plan" in markdown
     assert "## Executive Summary" in markdown
+    assert "## Timeline Summary" in markdown
     assert "## Executive Risk Heatmap" in markdown
     assert "## Days 1-30" in markdown
     assert "## Days 31-60" in markdown
@@ -454,6 +511,7 @@ def test_100_day_plan_one_pager_markdown_export_works(monkeypatch):
     assert "## Current State" in markdown
     assert "## Target State" in markdown
     assert "## Overall Risk" in markdown
+    assert "## Timeline Summary" in markdown
     assert "## Executive Risk Heatmap" in markdown
     assert "## Top 5 Priorities" in markdown
     assert "## First 30 Days" in markdown

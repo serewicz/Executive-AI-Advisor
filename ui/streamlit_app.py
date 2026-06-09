@@ -668,6 +668,7 @@ def _render_full_hundred_day_plan(plan: dict[str, Any]) -> None:
     st.markdown("#### Executive Summary")
     st.markdown(plan.get("executive_summary", "No executive summary returned."))
 
+    _render_timeline_summary(plan.get("timeline_summary", []))
     _render_plan_at_a_glance(plan.get("plan_at_a_glance", []))
     _render_risk_heatmap(plan.get("risk_heatmap", []))
     if plan.get("quick_wins"):
@@ -765,6 +766,26 @@ def _render_plan_at_a_glance(rows: list[dict[str, Any]]) -> None:
                 "Key Actions": row.get("key_actions", ""),
                 "Success Measures": row.get("success_measures", ""),
                 "Risk Reduced": row.get("risk_reduced", ""),
+            }
+            for row in rows
+        ]
+    )
+
+
+def _render_timeline_summary(rows: list[dict[str, Any]]) -> None:
+    st.markdown("#### Timeline Summary")
+    if not rows:
+        st.markdown("No timeline summary returned.")
+        return
+    st.table(
+        [
+            {
+                "Phase": row.get("phase", ""),
+                "Primary Objective": row.get("primary_objective", ""),
+                "Key Actions": row.get("key_actions", ""),
+                "Expected Outcomes": row.get("expected_outcomes", ""),
+                "Risk Reduced": row.get("risk_reduced", ""),
+                "Board Checkpoint": row.get("board_checkpoint", ""),
             }
             for row in rows
         ]
@@ -1651,6 +1672,7 @@ def _build_hundred_day_plan_markdown(plan: dict[str, Any]) -> str:
         plan.get("executive_summary", ""),
         "",
     ]
+    lines.extend(_markdown_timeline_summary(plan.get("timeline_summary", [])))
     lines.extend(_markdown_plan_at_a_glance(plan.get("plan_at_a_glance", [])))
     lines.extend(_markdown_risk_heatmap(plan.get("risk_heatmap", [])))
     if plan.get("quick_wins"):
@@ -1688,6 +1710,7 @@ def _build_hundred_day_one_pager_markdown(plan: dict[str, Any]) -> str:
         "",
     ]
     lines.extend(_markdown_list("Top 5 Priorities", one_pager.get("top_5_priorities", [])))
+    lines.extend(_markdown_timeline_summary(plan.get("timeline_summary", [])))
     lines.extend(_markdown_risk_heatmap(plan.get("risk_heatmap", [])))
     lines.extend(_markdown_list("First 30 Days", one_pager.get("first_30_days", [])))
     lines.extend(_markdown_list("Days 31-60", one_pager.get("days_31_60", [])))
@@ -1718,6 +1741,35 @@ def _markdown_plan_at_a_glance(rows: list[dict[str, Any]]) -> list[str]:
                     row.get("key_actions", ""),
                     row.get("success_measures", ""),
                     row.get("risk_reduced", ""),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def _markdown_timeline_summary(rows: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "## Timeline Summary",
+        "",
+        "| Phase | Primary Objective | Key Actions | Expected Outcomes | Risk Reduced | Board Checkpoint |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    if not rows:
+        lines.extend(["| None provided. |  |  |  |  |  |", ""])
+        return lines
+    for row in rows:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(row.get("phase", "")),
+                    str(row.get("primary_objective", "")),
+                    str(row.get("key_actions", "")),
+                    str(row.get("expected_outcomes", "")),
+                    str(row.get("risk_reduced", "")),
+                    str(row.get("board_checkpoint", "")),
                 ]
             )
             + " |"

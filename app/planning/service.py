@@ -12,6 +12,7 @@ from app.planning.schemas import (
     PlanAtAGlanceRow,
     PlanPriority,
     PlanType,
+    TimelineSummaryRow,
 )
 
 
@@ -68,6 +69,7 @@ def generate_100_day_plan(
             dependencies=dependencies,
         ),
         risk_heatmap=report.risk_heatmap,
+        timeline_summary=_timeline_summary(plan_type, board_checkpoints),
         plan_at_a_glance=_plan_at_a_glance(plan_type),
         quick_wins=_quick_wins(plan_type),
         days_1_30=days_1_30,
@@ -352,6 +354,117 @@ def _plan_at_a_glance(plan_type: PlanType) -> list[PlanAtAGlanceRow]:
             risk_reduced=risk,
         )
         for timeframe, objective, actions, measures, risk in rows[plan_type]
+    ]
+
+
+def _timeline_summary(plan_type: PlanType, board_checkpoints: list[BoardCheckpoint]) -> list[TimelineSummaryRow]:
+    rows = {
+        "growth_equity": [
+            (
+                "Days 1-30: Stabilize",
+                "Establish the operating baseline for scale.",
+                "Feature flags, observability baseline, delivery cadence review, and governed AI pilot selection.",
+                "Leadership has measurable release, reliability, roadmap, and AI governance baselines.",
+                "Release risk, unmanaged AI risk, and unclear delivery capacity.",
+            ),
+            (
+                "Days 31-60: Govern",
+                "Create management controls for growth execution.",
+                "Capacity planning, architecture scalability review, hiring coverage plan, and FinOps review.",
+                "Management can defend scale assumptions, cost implications, and staffing requirements.",
+                "Scaling bottlenecks, margin leakage, and thin engineering coverage.",
+            ),
+            (
+                "Days 61-90: Modernize",
+                "Turn validated priorities into operating leverage.",
+                "Modernization pilot, release automation improvements, debt burn-down, and board dashboard.",
+                "Highest-leverage platform constraints have owners, metrics, and visible progress.",
+                "Recurring delivery drag, platform fragility, and opaque execution reporting.",
+            ),
+            (
+                "Days 91-100: Board Readout",
+                "Confirm next-quarter growth readiness decisions.",
+                "Growth-readiness scorecard, residual risk register, and next-quarter roadmap decisions.",
+                "Board sees what is complete, what remains constrained, and which investments need approval.",
+                "Residual scale risk and underfunded growth commitments.",
+            ),
+        ],
+        "acquisition_integration": [
+            (
+                "Days 1-30: Stabilize",
+                "Protect operational continuity while evidence is transferred.",
+                "Acquirer workshops, parallel runbooks, identity mapping, data dependency mapping, and support handoff planning.",
+                "Acquirer and target teams have named owners and a shared blocker register.",
+                "Day 1 continuity risk, hidden integration blockers, and informal knowledge transfer.",
+            ),
+            (
+                "Days 31-60: Govern",
+                "Standardize handoffs before ownership changes.",
+                "Deployment handoff process, key-person knowledge transfer, and blocker validation with acquirer owners.",
+                "Critical handoffs are rehearsed, documented, and governed by joint owners.",
+                "Post-close ownership ambiguity and unsupported production workflows.",
+            ),
+            (
+                "Days 61-90: Modernize",
+                "Rehearse integration readiness across core operating domains.",
+                "Identity, data, support, and deployment readiness rehearsal plus continuity gap closure.",
+                "Priority blockers are closed or escalated before they become post-close operating issues.",
+                "Customer disruption, migration failure, and support transition risk.",
+            ),
+            (
+                "Days 91-100: Board Readout",
+                "Confirm close and post-close technology decisions.",
+                "Board readout on integration blockers, continuity risk, owners, and post-close sequencing.",
+                "Board has the decisions required to protect continuity and sequence integration work.",
+                "Residual integration risk and unresolved Day 1 dependencies.",
+            ),
+        ],
+        "turnaround": [
+            (
+                "Days 1-30: Stabilize",
+                "Contain urgent operating, security, and spend risk.",
+                "Spend freeze, backup restore validation, key-person shadowing, production access review, and vulnerability triage.",
+                "Immediate controls are evidenced and the most urgent exposures have named owners.",
+                "Cash leakage, recovery uncertainty, privileged access exposure, and key-person dependency.",
+            ),
+            (
+                "Days 31-60: Govern",
+                "Install ownership and cost-control discipline.",
+                "Cost-control cadence, production ownership, incident roles, and recovery/release workflow documentation.",
+                "Management has a weekly operating cadence and clear accountability for production and spend.",
+                "Unowned production work, unmanaged cloud run-rate, and slow incident response.",
+            ),
+            (
+                "Days 61-90: Modernize",
+                "Convert stabilization into durable operating discipline.",
+                "Stability dashboard, technical debt burn-down for top operational risks, and FinOps savings targets.",
+                "Leadership can see whether incidents, MTTR, debt, and spend are improving.",
+                "Recurring instability, unresolved technical debt, and margin pressure.",
+            ),
+            (
+                "Days 91-100: Board Readout",
+                "Separate completed controls from decisions still requiring board action.",
+                "Stabilization scorecard, unresolved risk register, budget requests, and ownership gaps.",
+                "Board has a clear view of residual risk, funding needs, and next-quarter accountability.",
+                "Residual turnaround risk and unfunded remediation.",
+            ),
+        ],
+    }
+    checkpoint_by_timeframe = {
+        checkpoint.timeframe: checkpoint.question
+        for checkpoint in board_checkpoints
+    }
+    checkpoint_keys = ["Day 30", "Day 60", "Day 90", "Day 100"]
+    return [
+        TimelineSummaryRow(
+            phase=phase,
+            primary_objective=objective,
+            key_actions=actions,
+            expected_outcomes=outcomes,
+            risk_reduced=risk_reduced,
+            board_checkpoint=checkpoint_by_timeframe.get(checkpoint_keys[index], ""),
+        )
+        for index, (phase, objective, actions, outcomes, risk_reduced) in enumerate(rows[plan_type])
     ]
 
 

@@ -35,6 +35,15 @@ class PlanAtAGlanceRow(BaseModel):
     risk_reduced: str
 
 
+class TimelineSummaryRow(BaseModel):
+    phase: str
+    primary_objective: str
+    key_actions: str
+    expected_outcomes: str
+    risk_reduced: str
+    board_checkpoint: str
+
+
 class BoardCheckpoint(BaseModel):
     timeframe: str
     question: str
@@ -63,6 +72,7 @@ class HundredDayPlanResponse(BaseModel):
     executive_summary: str
     executive_one_pager: ExecutiveOnePager
     risk_heatmap: list[RiskHeatmapRow]
+    timeline_summary: list[TimelineSummaryRow]
     plan_at_a_glance: list[PlanAtAGlanceRow]
     quick_wins: list[str] = []
     days_1_30: list[HundredDayPlanAction]
