@@ -4,6 +4,7 @@ from ui.streamlit_app import (
     _build_hundred_day_plan_markdown,
     _build_technology_report_markdown,
     _build_qa_payload,
+    _all_documents_ready,
     _clear_local_ui_state,
     _download_key,
     _evaluation_missing_requirements,
@@ -11,6 +12,8 @@ from ui.streamlit_app import (
     _evaluation_questions_to_text,
     _evaluation_ready_documents,
     _export_filename,
+    _processing_investigation_message,
+    _processing_status_rows,
     _risk_counts,
     _remove_document_from_local_state,
     _sync_active_document_set_state,
@@ -202,6 +205,76 @@ def test_risk_counts_summarize_findings():
     )
 
     assert counts == {"red": 1, "yellow": 2, "green": 1}
+
+
+def test_processing_status_rows_show_text_lifecycle_labels():
+    rows = _processing_status_rows(
+        [
+            {"filename": "01-executive-summary.pdf", "status": "embedded"},
+            {"filename": "02-technology-assessment.pdf", "status": "uploaded"},
+            {"filename": "03-security-assessment.pdf", "status": "failed", "error": "Chunking error"},
+        ]
+    )
+
+    assert rows == [
+        {
+            "File": "01-executive-summary.pdf",
+            "Status": "Embedded",
+            "Parse": "Done",
+            "Chunk": "Done",
+            "Embed": "Done",
+            "Last Updated": "",
+            "Notes": "Ready",
+        },
+        {
+            "File": "02-technology-assessment.pdf",
+            "Status": "Uploaded",
+            "Parse": "Pending",
+            "Chunk": "Pending",
+            "Embed": "Pending",
+            "Last Updated": "",
+            "Notes": "Needs processing",
+        },
+        {
+            "File": "03-security-assessment.pdf",
+            "Status": "Failed",
+            "Parse": "Failed",
+            "Chunk": "Failed",
+            "Embed": "Failed",
+            "Last Updated": "",
+            "Notes": "Chunking error",
+        },
+    ]
+
+
+def test_processing_investigation_message_prioritizes_failed_documents():
+    message_type, message = _processing_investigation_message(
+        [
+            {"status": "embedded"},
+            {"status": "failed"},
+        ]
+    )
+
+    assert message_type == "error"
+    assert message == "One or more documents failed. Review the Notes column."
+
+
+def test_processing_investigation_message_reports_complete_when_all_ready():
+    message_type, message = _processing_investigation_message(
+        [
+            {"status": "embedded"},
+            {"status": "indexed"},
+        ]
+    )
+
+    assert message_type == "success"
+    assert "Processing complete" in message
+
+
+def test_all_documents_ready_only_for_embedded_or_indexed_documents():
+    assert _all_documents_ready([{"status": "embedded"}, {"status": "indexed"}]) is True
+    assert _all_documents_ready([{"status": "embedded"}, {"status": "uploaded"}]) is False
+    assert _all_documents_ready([]) is False
 
 
 def test_export_filename_sanitizes_investigation_and_variant():

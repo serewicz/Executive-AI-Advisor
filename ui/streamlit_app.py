@@ -46,17 +46,7 @@ DEFAULT_LLM_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
     "grok": "grok-4.3",
 }
-PROCESSING_STATUSES = {
-    "uploaded": ("Uploaded", 15),
-    "parsing": ("Parsing", 30),
-    "parsed": ("Parsed", 45),
-    "chunking": ("Chunking", 60),
-    "chunked": ("Chunked", 75),
-    "embedding": ("Embedding", 90),
-    "embedded": ("Embedded", 100),
-    "indexed": ("Embedded", 100),
-    "failed": ("Failed", 100),
-}
+READY_DOCUMENT_STATUSES = {"embedded", "indexed"}
 LOCAL_UI_STATE_KEYS = [
     "document_id",
     "summary_document_id",
@@ -462,12 +452,22 @@ def _render_processing_section() -> None:
     document_set_id = st.session_state.active_document_set_id
     processing_active = bool(st.session_state.get("processing_active"))
     if document_set_id:
-        _render_processing_status_table(st.session_state.uploaded_documents)
+        detail = _load_active_document_set_detail()
+        if detail:
+            _sync_active_document_set_state(detail)
+        documents = st.session_state.uploaded_documents
+        _render_processing_status_table(documents)
+        process_disabled = (
+            not document_set_id
+            or not documents
+            or processing_active
+            or _all_documents_ready(documents)
+        )
         col1, col2 = st.columns([1, 1])
         with col1:
             refresh_clicked = st.button("Refresh Status", use_container_width=True, disabled=processing_active)
         with col2:
-            process_clicked = st.button("Process All", use_container_width=True, disabled=processing_active)
+            process_clicked = st.button("Process All", use_container_width=True, disabled=process_disabled)
 
         if refresh_clicked:
             detail = _load_active_document_set_detail()
@@ -1336,40 +1336,124 @@ def _render_processing_status_table(documents: list[dict[str, Any]]) -> None:
         return
 
     st.markdown("#### Document Status")
-    for document in documents:
-        _render_single_document_status(
-            str(document.get("filename", "Untitled document")),
-            str(document.get("status", "uploaded")),
-            str(document.get("error", "") or document.get("error_message", "")),
-        )
+    st.table(_processing_status_rows(documents))
+    _render_investigation_processing_message(documents)
 
 
 def _render_single_document_status(filename: str, status: str, error_message: str = "") -> None:
-    label, progress_value = _processing_status(status)
-    st.caption(f"{filename}: {label}")
-    st.progress(progress_value, text=label)
-    if status.lower() == "failed":
-        st.error(error_message or "Processing failed for this document. Review backend logs for details.")
+    row = _processing_status_row({"filename": filename, "status": status, "error": error_message})
+    st.table([row])
+    if row["Status"] == "Failed":
+        st.error(row["Notes"])
 
 
 def _render_processing_completion(documents: list[dict[str, Any]]) -> None:
     if not documents:
         return
-    failed = [document for document in documents if str(document.get("status", "")).lower() == "failed"]
-    if failed:
-        st.error("Processing finished with errors. Failed documents are shown in the status list.")
-        for document in failed:
-            st.write(f"- {document.get('filename', 'Untitled document')}: failed")
-        return
-    if all(str(document.get("status", "")).lower() in {"embedded", "indexed"} for document in documents):
-        st.success("Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan.")
+    _render_investigation_processing_message(documents)
+
+
+def _render_investigation_processing_message(documents: list[dict[str, Any]]) -> None:
+    message_type, message = _processing_investigation_message(documents)
+    if message_type == "success":
+        st.success(message)
+    elif message_type == "error":
+        st.error(message)
     else:
-        st.info("Processing updated. Refresh status if any documents are still moving through the pipeline.")
+        st.info(message)
 
 
-def _processing_status(status: str) -> tuple[str, int]:
-    normalized = status.strip().lower()
-    return PROCESSING_STATUSES.get(normalized, (status.title() if status else "Uploaded", 10))
+def _processing_status_rows(documents: list[dict[str, Any]]) -> list[dict[str, str]]:
+    return [_processing_status_row(document) for document in documents]
+
+
+def _processing_status_row(document: dict[str, Any]) -> dict[str, str]:
+    status = _normalized_status(str(document.get("status", "uploaded")))
+    return {
+        "File": str(document.get("filename", "Untitled document")),
+        "Status": _display_status(status),
+        "Parse": _parse_label(status),
+        "Chunk": _chunk_label(status),
+        "Embed": _embed_label(status),
+        "Last Updated": str(document.get("updated_at") or document.get("last_updated") or ""),
+        "Notes": _processing_notes(document, status),
+    }
+
+
+def _processing_investigation_message(documents: list[dict[str, Any]]) -> tuple[str, str]:
+    statuses = [_normalized_status(str(document.get("status", "uploaded"))) for document in documents]
+    if any(status == "failed" for status in statuses):
+        return "error", "One or more documents failed. Review the Notes column."
+    if statuses and all(status in READY_DOCUMENT_STATUSES for status in statuses):
+        return "success", "Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan."
+    return "info", "Some documents still need processing."
+
+
+def _all_documents_ready(documents: list[dict[str, Any]]) -> bool:
+    return bool(documents) and all(
+        _normalized_status(str(document.get("status", "uploaded"))) in READY_DOCUMENT_STATUSES
+        for document in documents
+    )
+
+
+def _normalized_status(status: str) -> str:
+    return status.strip().lower() or "uploaded"
+
+
+def _display_status(status: str) -> str:
+    labels = {
+        "uploaded": "Uploaded",
+        "parsing": "Parsing",
+        "parsed": "Parsed",
+        "chunking": "Chunking",
+        "chunked": "Chunked",
+        "embedding": "Embedding",
+        "embedded": "Embedded",
+        "indexed": "Indexed",
+        "failed": "Failed",
+    }
+    return labels.get(status, status.title())
+
+
+def _parse_label(status: str) -> str:
+    if status == "failed":
+        return "Failed"
+    if status == "parsing":
+        return "Running"
+    if status in {"parsed", "chunking", "chunked", "embedding", "embedded", "indexed"}:
+        return "Done"
+    return "Pending"
+
+
+def _chunk_label(status: str) -> str:
+    if status == "failed":
+        return "Failed"
+    if status == "chunking":
+        return "Running"
+    if status in {"chunked", "embedding", "embedded", "indexed"}:
+        return "Done"
+    return "Pending"
+
+
+def _embed_label(status: str) -> str:
+    if status == "failed":
+        return "Failed"
+    if status == "embedding":
+        return "Running"
+    if status in READY_DOCUMENT_STATUSES:
+        return "Done"
+    return "Pending"
+
+
+def _processing_notes(document: dict[str, Any], status: str) -> str:
+    error_message = str(document.get("error", "") or document.get("error_message", "")).strip()
+    if status == "failed":
+        return error_message or "Processing failed"
+    if status in READY_DOCUMENT_STATUSES:
+        return "Ready"
+    if status in {"parsing", "chunking", "embedding"}:
+        return "Running"
+    return "Needs processing"
 
 
 def _run_processing_step(step: str) -> None:
