@@ -107,6 +107,8 @@ http://localhost:8000/docs
 
 ## Running Streamlit
 
+Run Streamlit from the repository root so the local `app` package resolves consistently:
+
 ```bash
 streamlit run ui/streamlit_app.py
 ```

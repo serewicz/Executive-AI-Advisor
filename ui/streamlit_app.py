@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sys
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -8,6 +9,10 @@ from typing import Any
 
 import requests
 import streamlit as st
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app.advisor.text import normalize_text_field
 
