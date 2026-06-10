@@ -86,6 +86,7 @@ Open:
 ## Documentation
 
 - [Quick Start](docs/QuickStart.md)
+- [Methodology](docs/Methodology.md)
 - [Exact Demo Tutorial](docs/ExactDemoTutorial.md)
 - [User Guide](docs/UserGuide.md)
 - [Architecture](docs/Architecture.md)
@@ -94,6 +95,10 @@ Open:
 - [Evaluation](docs/Evaluation.md)
 - [Governance](docs/Governance.md)
 - [Security](docs/Security.md)
+
+## Methodology
+
+Executive AI Advisor automates portions of the CTO Operating System advisory methodology through document ingestion, retrieval, citations, diligence reports, board briefs, and 100-day technology plans. See [Methodology](docs/Methodology.md) for how this software platform relates to the CTO Operating System repository.
 
 ## Demo Datasets
 
