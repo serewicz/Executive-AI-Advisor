@@ -7,6 +7,7 @@ from app.advisor.providers.base import (
     TechnologyDiligenceDraftResponse,
 )
 from app.advisor.providers.openai_provider import _json_payload, _normalize_confidence, _normalize_list
+from app.advisor.text import normalize_text_field
 from app.core.config import settings
 
 
@@ -71,7 +72,7 @@ class AnthropicChatProvider(LLMProvider):
             "Anthropic chat response was not valid JSON.",
         )
         return LLMResponse(
-            answer=str(payload.get("answer", "")).strip(),
+            answer=normalize_text_field(payload.get("answer", "")),
             confidence=_normalize_confidence(payload.get("confidence")),
             limitations=_normalize_list(payload.get("limitations")),
         )
@@ -95,7 +96,7 @@ class AnthropicChatProvider(LLMProvider):
         if not isinstance(memo, dict):
             raise LLMError("Anthropic board summary response did not include a memo object.")
         return BoardMemoResponse(
-            executive_summary=str(memo.get("executive_summary", "")).strip(),
+            executive_summary=normalize_text_field(memo.get("executive_summary", "")),
             key_risks=_normalize_list(memo.get("key_risks")),
             evidence=_normalize_list(memo.get("evidence")),
             board_questions=_normalize_list(memo.get("board_questions")),
@@ -119,7 +120,7 @@ class AnthropicChatProvider(LLMProvider):
             "Anthropic technology diligence report response was not valid JSON.",
         )
         return TechnologyDiligenceDraftResponse(
-            executive_summary=str(payload.get("executive_summary", "")).strip(),
+            executive_summary=normalize_text_field(payload.get("executive_summary", "")),
             top_5_risks=_normalize_list(payload.get("top_5_risks")),
             management_questions=_normalize_list(payload.get("management_questions")),
             board_discussion_points=_normalize_list(payload.get("board_discussion_points")),

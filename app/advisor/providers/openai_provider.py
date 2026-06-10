@@ -10,6 +10,7 @@ from app.advisor.providers.base import (
     SourceContext,
     TechnologyDiligenceDraftResponse,
 )
+from app.advisor.text import normalize_text_field
 from app.core.config import settings
 
 
@@ -67,7 +68,7 @@ class OpenAIChatProvider(LLMProvider):
             "OpenAI chat response was not valid JSON.",
         )
         return LLMResponse(
-            answer=str(payload.get("answer", "")).strip(),
+            answer=normalize_text_field(payload.get("answer", "")),
             confidence=_normalize_confidence(payload.get("confidence")),
             limitations=_normalize_list(payload.get("limitations")),
         )
@@ -92,7 +93,7 @@ class OpenAIChatProvider(LLMProvider):
             raise LLMError("OpenAI board summary response did not include a memo object.")
 
         return BoardMemoResponse(
-            executive_summary=str(memo.get("executive_summary", "")).strip(),
+            executive_summary=normalize_text_field(memo.get("executive_summary", "")),
             key_risks=_normalize_list(memo.get("key_risks")),
             evidence=_normalize_list(memo.get("evidence")),
             board_questions=_normalize_list(memo.get("board_questions")),
@@ -116,7 +117,7 @@ class OpenAIChatProvider(LLMProvider):
             "OpenAI technology diligence report response was not valid JSON.",
         )
         return TechnologyDiligenceDraftResponse(
-            executive_summary=str(payload.get("executive_summary", "")).strip(),
+            executive_summary=normalize_text_field(payload.get("executive_summary", "")),
             top_5_risks=_normalize_list(payload.get("top_5_risks")),
             management_questions=_normalize_list(payload.get("management_questions")),
             board_discussion_points=_normalize_list(payload.get("board_discussion_points")),
@@ -147,6 +148,6 @@ def _normalize_list(value) -> list[str]:
     if value is None:
         return []
     if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    normalized = str(value).strip()
+        return [normalize_text_field(item) for item in value if normalize_text_field(item)]
+    normalized = normalize_text_field(value)
     return [normalized] if normalized else []

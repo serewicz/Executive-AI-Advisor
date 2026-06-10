@@ -1,11 +1,15 @@
 import json
 import os
+import re
+from datetime import datetime
 from html import escape
 from pathlib import Path
 from typing import Any
 
 import requests
 import streamlit as st
+
+from app.advisor.text import normalize_text_field
 
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
@@ -37,6 +41,17 @@ DEFAULT_LLM_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
     "grok": "grok-4.3",
 }
+PROCESSING_STATUSES = {
+    "uploaded": ("Uploaded", 15),
+    "parsing": ("Parsing", 30),
+    "parsed": ("Parsed", 45),
+    "chunking": ("Chunking", 60),
+    "chunked": ("Chunked", 75),
+    "embedding": ("Embedding", 90),
+    "embedded": ("Embedded", 100),
+    "indexed": ("Embedded", 100),
+    "failed": ("Failed", 100),
+}
 LOCAL_UI_STATE_KEYS = [
     "document_id",
     "summary_document_id",
@@ -60,6 +75,8 @@ LOCAL_UI_STATE_KEYS = [
     "openai_api_key",
     "anthropic_api_key",
     "xai_api_key",
+    "processing_active",
+    "processing_results",
 ]
 
 
@@ -122,6 +139,8 @@ def _initialize_state() -> None:
         "openai_api_key": "",
         "anthropic_api_key": "",
         "xai_api_key": "",
+        "processing_active": False,
+        "processing_results": [],
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -153,6 +172,10 @@ def _apply_styles() -> None:
 def _render_llm_provider_sidebar() -> None:
     with st.sidebar:
         st.header("LLM Provider")
+        st.caption(
+            "Choose the answer-generation provider used for reports. Provider and model are recorded in report "
+            "metadata for governance; API keys are never displayed or exported."
+        )
         provider_keys = list(LLM_PROVIDER_OPTIONS.keys())
         current_provider = st.session_state.active_llm_provider
         selected_provider = st.selectbox(
@@ -174,10 +197,18 @@ def _render_llm_provider_sidebar() -> None:
         )
         st.session_state.active_llm_model = model.strip() or DEFAULT_LLM_MODELS[selected_provider]
 
-        st.warning(
-            "Session-entered keys are kept in local Streamlit session state and are not saved by the app. "
-            "Do not commit keys to Git."
-        )
+        with st.expander("Why use your own provider key?", expanded=False):
+            st.markdown(
+                "\n".join(
+                    [
+                        "- **Security:** keys stay in the local Streamlit session and are not saved by the app.",
+                        "- **Cost tracking:** your provider account shows usage and spend directly.",
+                        "- **Provider control:** compare Mock, OpenAI, Anthropic, and Grok outputs without code changes.",
+                        "- **Governance:** generated reports show provider and model metadata, never API keys.",
+                    ]
+                )
+            )
+        st.warning("Do not commit provider API keys to Git or paste them into exported report text.")
         entered_key = st.text_input("API key", type="password", key=f"llm_api_key_input_{selected_provider}")
         col1, col2 = st.columns(2)
         with col1:
@@ -424,8 +455,22 @@ def _render_processing_section() -> None:
     )
 
     document_set_id = st.session_state.active_document_set_id
+    processing_active = bool(st.session_state.get("processing_active"))
     if document_set_id:
-        if st.button("Process All", use_container_width=True):
+        _render_processing_status_table(st.session_state.uploaded_documents)
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            refresh_clicked = st.button("Refresh Status", use_container_width=True, disabled=processing_active)
+        with col2:
+            process_clicked = st.button("Process All", use_container_width=True, disabled=processing_active)
+
+        if refresh_clicked:
+            detail = _load_active_document_set_detail()
+            if detail:
+                _sync_active_document_set_state(detail)
+                st.success("Investigation status refreshed.")
+
+        if process_clicked:
             detail = _load_active_document_set_detail()
             if not detail:
                 return
@@ -433,35 +478,39 @@ def _render_processing_section() -> None:
             if not st.session_state.uploaded_documents:
                 st.warning("No backend documents are currently attached to this investigation.")
                 return
-            response = _post_json(f"/document-sets/{document_set_id}/process", {})
+            st.session_state.processing_active = True
+            with st.spinner("Processing investigation documents"):
+                response = _post_json(f"/document-sets/{document_set_id}/process", {})
+            st.session_state.processing_active = False
             if response:
                 documents = response.get("documents", [])
-                st.success(f"Processed {len(documents)} document(s) in active investigation.")
-                for document in documents:
-                    st.write(f"- {document.get('filename')}: **{document.get('status')}**")
+                st.session_state.processing_results = documents
                 refreshed = _load_active_document_set_detail()
                 if refreshed:
                     _sync_active_document_set_state(refreshed)
-                st.rerun()
+                _render_processing_completion(documents)
+
+        if st.session_state.get("processing_results") and not process_clicked:
+            _render_processing_completion(st.session_state.processing_results)
         st.caption("Runs parse, chunk, and embed for documents in the active investigation that need processing.")
         return
 
     document_id = _active_document_id()
+    if st.session_state.document_status:
+        _render_single_document_status(st.session_state.uploaded_filename or document_id, st.session_state.document_status)
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("Parse document", disabled=not document_id, use_container_width=True):
+        if st.button("Parse document", disabled=not document_id or processing_active, use_container_width=True):
             _run_processing_step("parse")
     with col2:
-        if st.button("Chunk document", disabled=not document_id, use_container_width=True):
+        if st.button("Chunk document", disabled=not document_id or processing_active, use_container_width=True):
             _run_processing_step("chunk")
     with col3:
-        if st.button("Embed document", disabled=not document_id, use_container_width=True):
+        if st.button("Embed document", disabled=not document_id or processing_active, use_container_width=True):
             _run_processing_step("embed")
 
     if not document_id:
         st.info("Upload a PDF before running the processing pipeline.")
-    elif st.session_state.document_status:
-        st.write(f"Current status: **{st.session_state.document_status}**")
 
 
 def _render_qa_section() -> None:
@@ -575,7 +624,7 @@ def _render_board_summary_section() -> None:
         if response:
             if response.get("document_id"):
                 st.session_state.document_id = response["document_id"]
-            st.session_state.board_summary = response
+            st.session_state.board_summary = _with_report_metadata(response, "board_summary")
 
     if st.session_state.board_summary:
         _render_board_memo(st.session_state.board_summary)
@@ -585,10 +634,11 @@ def _render_board_memo(response: dict[str, Any]) -> None:
     memo = response.get("memo", {})
     title = _format_summary_type(response.get("summary_type", "board_brief"))
     st.subheader(title)
+    _render_report_metadata(response)
     _render_confidence(response.get("confidence", "low"))
 
     st.markdown("#### Executive Summary")
-    st.markdown(memo.get("executive_summary", "No executive summary returned."))
+    st.markdown(normalize_text_field(memo.get("executive_summary", "No executive summary returned.")))
 
     _render_list("Key Risks", memo.get("key_risks", []))
     _render_list("Evidence", memo.get("evidence", []))
@@ -633,7 +683,7 @@ def _render_technology_report_section() -> None:
                 },
             )
         if response:
-            st.session_state.technology_report = response
+            st.session_state.technology_report = _with_report_metadata(response, "technology_due_diligence")
 
     report = st.session_state.technology_report
     if report:
@@ -642,6 +692,7 @@ def _render_technology_report_section() -> None:
 
 def _render_technology_report(report: dict[str, Any]) -> None:
     st.subheader("Technology Due Diligence Report")
+    _render_report_metadata(report)
     findings = report.get("findings", [])
     risk_counts = _risk_counts(findings)
 
@@ -664,7 +715,7 @@ def _render_technology_report(report: dict[str, Any]) -> None:
     )
 
     st.markdown("#### Executive Summary")
-    st.markdown(report.get("executive_summary", "No executive summary returned."))
+    st.markdown(normalize_text_field(report.get("executive_summary", "No executive summary returned.")))
 
     _render_risk_heatmap(report.get("risk_heatmap", []))
     _render_list("Top 5 Risks", report.get("top_5_risks", []))
@@ -680,9 +731,9 @@ def _render_technology_report(report: dict[str, Any]) -> None:
     st.download_button(
         label="Download Technology Due Diligence Report.md",
         data=markdown,
-        file_name="Technology Due Diligence Report.md",
+        file_name=_export_filename(report, "technology_due_diligence"),
         mime="text/markdown",
-        key=f"download_report_inline_{report.get('report_type', 'technology_due_diligence')}_{report.get('document_set_id', 'unknown')}",
+        key=f"{_download_key(report, 'technology_due_diligence')}_inline",
         use_container_width=True,
     )
 
@@ -763,7 +814,11 @@ def _render_hundred_day_plan_section() -> None:
                 },
             )
         if response:
-            st.session_state.hundred_day_plan = response
+            st.session_state.hundred_day_plan = _with_report_metadata(
+                response,
+                "100_day_plan",
+                variant=plan_type,
+            )
 
     plan = st.session_state.hundred_day_plan
     if plan:
@@ -772,6 +827,7 @@ def _render_hundred_day_plan_section() -> None:
 
 def _render_hundred_day_plan(plan: dict[str, Any]) -> None:
     st.subheader("100-Day Technology Plan")
+    _render_report_metadata(plan)
     col1, col2 = st.columns(2)
     col1.metric("Plan Type", _format_summary_type(plan.get("plan_type", "")))
     col2.metric("Overall Priority", str(plan.get("overall_priority", "unknown")).title())
@@ -785,7 +841,7 @@ def _render_hundred_day_plan(plan: dict[str, Any]) -> None:
 
 def _render_full_hundred_day_plan(plan: dict[str, Any]) -> None:
     st.markdown("#### Executive Summary")
-    st.markdown(plan.get("executive_summary", "No executive summary returned."))
+    st.markdown(normalize_text_field(plan.get("executive_summary", "No executive summary returned.")))
 
     _render_timeline_summary(plan.get("timeline_summary", []))
     _render_plan_at_a_glance(plan.get("plan_at_a_glance", []))
@@ -805,9 +861,9 @@ def _render_full_hundred_day_plan(plan: dict[str, Any]) -> None:
     st.download_button(
         label="Download 100-Day Technology Plan.md",
         data=markdown,
-        file_name="100-Day Technology Plan.md",
+        file_name=_export_filename(plan, "100_day_plan", str(plan.get("plan_type", "plan"))),
         mime="text/markdown",
-        key=f"download_hundred_day_plan_markdown_{plan.get('plan_type', 'plan')}_{plan.get('document_set_id', 'unknown')}",
+        key=f"{_download_key(plan, '100_day_plan', str(plan.get('plan_type', 'plan')))}_inline",
         use_container_width=True,
     )
 
@@ -819,7 +875,7 @@ def _render_hundred_day_one_pager(plan: dict[str, Any]) -> None:
         return
 
     st.markdown("#### Executive Summary")
-    st.markdown(one_pager.get("executive_summary", "No executive summary returned."))
+    st.markdown(normalize_text_field(one_pager.get("executive_summary", "No executive summary returned.")))
 
     col1, col2 = st.columns(2)
     with col1:
@@ -845,9 +901,9 @@ def _render_hundred_day_one_pager(plan: dict[str, Any]) -> None:
     st.download_button(
         label="Download Executive One-Pager.md",
         data=markdown,
-        file_name="Executive One-Pager.md",
+        file_name=_export_filename(plan, "100_day_plan_one_pager", str(plan.get("plan_type", "plan"))),
         mime="text/markdown",
-        key=f"download_hundred_day_one_pager_markdown_{plan.get('plan_type', 'plan')}_{plan.get('document_set_id', 'unknown')}",
+        key=f"{_download_key(plan, '100_day_plan_one_pager', str(plan.get('plan_type', 'plan')))}_inline",
         use_container_width=True,
     )
 
@@ -1020,13 +1076,14 @@ def _render_evaluation_section() -> None:
                 },
             )
         if response:
-            st.session_state.evaluation_response = response
+            st.session_state.evaluation_response = _with_report_metadata(response, "evaluation_report")
 
     response = st.session_state.evaluation_response
     if not response:
         return
 
     st.metric("Average Score", f"{response.get('average_score', 0):.2f}")
+    _render_report_metadata(response)
     for result in response.get("results", []):
         with st.expander(f"{result.get('overall_score', 0):.2f} - {result.get('question', '')}"):
             col1, col2, col3, col4 = st.columns(4)
@@ -1047,9 +1104,9 @@ def _render_evaluation_section() -> None:
     st.download_button(
         label="Download Evaluation Report.md",
         data=report,
-        file_name="Evaluation Report.md",
+        file_name=_export_filename(response, "evaluation_report"),
         mime="text/markdown",
-        key=f"download_evaluation_report_markdown_{response.get('evaluation_run_id', 'latest')}",
+        key=_download_key(response, "evaluation_report", response.get("evaluation_run_id", "latest")),
         use_container_width=True,
     )
 
@@ -1096,9 +1153,9 @@ def _render_export_section() -> None:
         st.download_button(
             label="Download Board Memo.md",
             data=markdown,
-            file_name="Board Memo.md",
+            file_name=_export_filename(board_summary, "board_summary", board_summary.get("summary_type", "board")),
             mime="text/markdown",
-            key=f"download_board_summary_markdown_{board_summary.get('summary_type', 'board')}_{board_summary.get('document_set_id') or board_summary.get('document_id') or 'latest'}",
+            key=_download_key(board_summary, "board_summary", board_summary.get("summary_type", "board")),
             use_container_width=True,
         )
         with st.expander("Board memo Markdown preview"):
@@ -1109,9 +1166,9 @@ def _render_export_section() -> None:
         st.download_button(
             label="Download Technology Due Diligence Report.md",
             data=report_markdown,
-            file_name="Technology Due Diligence Report.md",
+            file_name=_export_filename(technology_report, "technology_due_diligence"),
             mime="text/markdown",
-            key=f"download_technology_diligence_markdown_{technology_report.get('report_type', 'technology_due_diligence')}_{technology_report.get('document_set_id', 'unknown')}",
+            key=_download_key(technology_report, "technology_due_diligence"),
             use_container_width=True,
         )
         with st.expander("Technology diligence Markdown preview"):
@@ -1122,9 +1179,13 @@ def _render_export_section() -> None:
         st.download_button(
             label="Download 100-Day Technology Plan.md",
             data=plan_markdown,
-            file_name="100-Day Technology Plan.md",
+            file_name=_export_filename(
+                hundred_day_plan,
+                "100_day_plan",
+                str(hundred_day_plan.get("plan_type", "plan")),
+            ),
             mime="text/markdown",
-            key=f"download_hundred_day_plan_export_markdown_{hundred_day_plan.get('plan_type', 'plan')}_{hundred_day_plan.get('document_set_id', 'unknown')}",
+            key=_download_key(hundred_day_plan, "100_day_plan", str(hundred_day_plan.get("plan_type", "plan"))),
             use_container_width=True,
         )
         with st.expander("100-day plan Markdown preview"):
@@ -1264,6 +1325,48 @@ def _evaluation_missing_requirements(
     return missing
 
 
+def _render_processing_status_table(documents: list[dict[str, Any]]) -> None:
+    if not documents:
+        st.info("Upload PDFs into the active investigation before processing.")
+        return
+
+    st.markdown("#### Document Status")
+    for document in documents:
+        _render_single_document_status(
+            str(document.get("filename", "Untitled document")),
+            str(document.get("status", "uploaded")),
+            str(document.get("error", "") or document.get("error_message", "")),
+        )
+
+
+def _render_single_document_status(filename: str, status: str, error_message: str = "") -> None:
+    label, progress_value = _processing_status(status)
+    st.caption(f"{filename}: {label}")
+    st.progress(progress_value, text=label)
+    if status.lower() == "failed":
+        st.error(error_message or "Processing failed for this document. Review backend logs for details.")
+
+
+def _render_processing_completion(documents: list[dict[str, Any]]) -> None:
+    if not documents:
+        return
+    failed = [document for document in documents if str(document.get("status", "")).lower() == "failed"]
+    if failed:
+        st.error("Processing finished with errors. Failed documents are shown in the status list.")
+        for document in failed:
+            st.write(f"- {document.get('filename', 'Untitled document')}: failed")
+        return
+    if all(str(document.get("status", "")).lower() in {"embedded", "indexed"} for document in documents):
+        st.success("Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan.")
+    else:
+        st.info("Processing updated. Refresh status if any documents are still moving through the pipeline.")
+
+
+def _processing_status(status: str) -> tuple[str, int]:
+    normalized = status.strip().lower()
+    return PROCESSING_STATUSES.get(normalized, (status.title() if status else "Uploaded", 10))
+
+
 def _run_processing_step(step: str) -> None:
     document_id = _active_document_id()
     if not document_id:
@@ -1271,8 +1374,12 @@ def _run_processing_step(step: str) -> None:
         return
 
     labels = {"parse": "Parsing", "chunk": "Chunking", "embed": "Embedding"}
+    interim_status = {"parse": "parsing", "chunk": "chunking", "embed": "embedding"}
+    st.session_state.processing_active = True
+    st.session_state.document_status = interim_status[step]
     with st.spinner(labels[step]):
         response = _post_json(f"/documents/{document_id}/{step}", {})
+    st.session_state.processing_active = False
 
     if not response:
         return
@@ -1285,6 +1392,8 @@ def _run_processing_step(step: str) -> None:
         st.write(f"Chunks created: **{response['chunks_created']}**")
     if "chunks_embedded" in response:
         st.write(f"Chunks embedded: **{response['chunks_embedded']}**")
+    if st.session_state.document_status in {"embedded", "indexed"}:
+        st.success("Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan.")
 
 
 def _post_json(
@@ -1365,6 +1474,7 @@ def _set_active_document_set(document_set_id: str, name: str) -> None:
     st.session_state.technology_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
+    st.session_state.processing_results = []
 
 
 def _clear_active_document_set() -> None:
@@ -1380,15 +1490,18 @@ def _clear_active_document_set() -> None:
     st.session_state.technology_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
+    st.session_state.processing_results = []
 
 
 def _clear_local_ui_state() -> None:
     for key in LOCAL_UI_STATE_KEYS:
-        if key in {"uploaded_documents", "selected_documents"}:
+        if key in {"uploaded_documents", "selected_documents", "processing_results"}:
             st.session_state[key] = []
         elif key in {"qa_response", "board_summary", "technology_report", "hundred_day_plan", "evaluation_response"}:
             st.session_state[key] = None
         elif key == "evaluation_questions_initialized":
+            st.session_state[key] = False
+        elif key == "processing_active":
             st.session_state[key] = False
         else:
             st.session_state[key] = ""
@@ -1455,6 +1568,7 @@ def _remove_document_from_local_state(document_id: str | None) -> None:
     st.session_state.technology_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
+    st.session_state.processing_results = []
 
 
 def _extract_uuid_from_text(text: str) -> str | None:
@@ -1603,18 +1717,140 @@ def _render_citation_body(citation: dict[str, Any]) -> None:
     st.markdown(citation.get("excerpt", ""))
 
 
+def build_export_filename(
+    investigation_name: str,
+    report_type: str,
+    variant: str | None = None,
+    extension: str = "md",
+) -> str:
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+    parts = [
+        _sanitize_filename_part(investigation_name or "Investigation"),
+        _sanitize_filename_part(report_type),
+    ]
+    if variant:
+        parts.append(_sanitize_filename_part(variant))
+    parts.append(timestamp)
+    suffix = extension.lstrip(".") or "md"
+    return "_".join(part for part in parts if part) + f".{suffix}"
+
+
+def _sanitize_filename_part(value: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9]+", "_", value.strip())
+    sanitized = re.sub(r"_+", "_", sanitized).strip("_")
+    return sanitized or "report"
+
+
+def _with_report_metadata(
+    payload: dict[str, Any],
+    report_type: str,
+    variant: str | None = None,
+) -> dict[str, Any]:
+    enriched = dict(payload)
+    enriched["report_metadata"] = {
+        "investigation": st.session_state.get("active_document_set_name") or "Single Document",
+        "report_type": report_type,
+        "plan_type": variant,
+        "provider": LLM_PROVIDER_OPTIONS.get(st.session_state.get("active_llm_provider", "mock"), "Mock"),
+        "model": st.session_state.get("active_llm_model") or DEFAULT_LLM_MODELS["mock"],
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "document_set_id": st.session_state.get("active_document_set_id") or payload.get("document_set_id", ""),
+        "included_documents": _included_document_names(),
+    }
+    return enriched
+
+
+def _included_document_names() -> list[str]:
+    names = [
+        str(document.get("filename", "")).strip()
+        for document in st.session_state.get("uploaded_documents", [])
+        if str(document.get("filename", "")).strip()
+    ]
+    if names:
+        return names
+    uploaded_filename = str(st.session_state.get("uploaded_filename", "")).strip()
+    return [uploaded_filename] if uploaded_filename else []
+
+
+def _render_report_metadata(payload: dict[str, Any]) -> None:
+    metadata = _report_metadata(payload)
+    st.caption(
+        f"Provider: {metadata['provider']} | Model: {metadata['model']} | Generated: {metadata['generated_at']}"
+    )
+
+
+def _report_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(payload.get("report_metadata") or {})
+    metadata.setdefault("investigation", st.session_state.get("active_document_set_name") or "Investigation")
+    metadata.setdefault("report_type", payload.get("report_type") or payload.get("summary_type") or "report")
+    metadata.setdefault("plan_type", payload.get("plan_type"))
+    metadata.setdefault("provider", LLM_PROVIDER_OPTIONS.get(st.session_state.get("active_llm_provider", "mock"), "Mock"))
+    metadata.setdefault("model", st.session_state.get("active_llm_model") or DEFAULT_LLM_MODELS["mock"])
+    metadata.setdefault("generated_at", datetime.now().strftime("%Y-%m-%d %H:%M"))
+    metadata.setdefault(
+        "document_set_id",
+        payload.get("document_set_id") or st.session_state.get("active_document_set_id", ""),
+    )
+    metadata.setdefault("included_documents", _included_document_names())
+    return metadata
+
+
+def _metadata_lines(payload: dict[str, Any], default_report_type: str) -> list[str]:
+    metadata = _report_metadata(payload)
+    report_type = metadata.get("report_type") or default_report_type
+    plan_type = metadata.get("plan_type")
+    included_documents = metadata.get("included_documents") or []
+    lines = [
+        f"- Investigation: {metadata.get('investigation', 'Investigation')}",
+        f"- Report Type: {report_type}",
+    ]
+    if plan_type:
+        lines.append(f"- Plan Type: {plan_type}")
+    lines.extend(
+        [
+            f"- Provider: {metadata.get('provider', 'Mock')}",
+            f"- Model: {metadata.get('model', 'mock')}",
+            f"- Generated At: {metadata.get('generated_at', '')}",
+            f"- Document Set ID: `{metadata.get('document_set_id', '')}`",
+            f"- Included Documents: {', '.join(included_documents) if included_documents else 'Not specified'}",
+            "",
+        ]
+    )
+    return lines
+
+
+def _export_filename(payload: dict[str, Any], report_type: str, variant: str | None = None) -> str:
+    metadata = _report_metadata(payload)
+    return build_export_filename(str(metadata.get("investigation", "Investigation")), report_type, variant)
+
+
+def _download_key(payload: dict[str, Any], report_type: str, variant: str | None = None) -> str:
+    metadata = _report_metadata(payload)
+    raw = "_".join(
+        [
+            "download",
+            report_type,
+            str(metadata.get("document_set_id") or payload.get("document_id") or "single"),
+            variant or str(metadata.get("plan_type") or ""),
+            str(metadata.get("generated_at") or ""),
+        ]
+    )
+    return _sanitize_filename_part(raw).lower()
+
+
 def _build_markdown_memo(response: dict[str, Any]) -> str:
     memo = response.get("memo", {})
     lines = [
         f"# {_format_summary_type(response.get('summary_type', 'board_brief'))}",
         "",
+        *_metadata_lines(response, "board_summary"),
         f"Document ID: `{response.get('document_id', '')}`",
         f"Investigation ID: `{response.get('document_set_id', '')}`",
         f"Scope: `{response.get('scope', 'document')}`",
         f"Confidence: **{str(response.get('confidence', 'low')).title()}**",
         "",
         "## Executive Summary",
-        memo.get("executive_summary", ""),
+        normalize_text_field(memo.get("executive_summary", "")),
         "",
     ]
 
@@ -1664,6 +1900,7 @@ def _build_evaluation_markdown(response: dict[str, Any]) -> str:
     lines = [
         "# Evaluation Report",
         "",
+        *_metadata_lines(response, "evaluation_report"),
         f"Evaluation Run ID: `{response.get('evaluation_run_id', '')}`",
         f"Document ID: `{response.get('document_id', '')}`",
         f"Evaluation Type: `{response.get('evaluation_type', '')}`",
@@ -1728,11 +1965,12 @@ def _build_technology_report_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Technology Due Diligence Report",
         "",
+        *_metadata_lines(report, "technology_due_diligence"),
         f"Investigation ID: `{report.get('document_set_id', '')}`",
         f"Report Type: `{report.get('report_type', 'technology_due_diligence')}`",
         "",
         "## Executive Summary",
-        report.get("executive_summary", ""),
+        normalize_text_field(report.get("executive_summary", "")),
         "",
         "## Overall Risk Rating",
         f"Risk Rating: **{str(report.get('overall_risk_rating', 'unknown')).title()}**",
@@ -1783,12 +2021,13 @@ def _build_hundred_day_plan_markdown(plan: dict[str, Any]) -> str:
     lines = [
         "# 100-Day Technology Plan",
         "",
+        *_metadata_lines(plan, "100_day_plan"),
         f"Investigation ID: `{plan.get('document_set_id', '')}`",
         f"Plan Type: `{plan.get('plan_type', '')}`",
         f"Overall Priority: **{str(plan.get('overall_priority', '')).title()}**",
         "",
         "## Executive Summary",
-        plan.get("executive_summary", ""),
+        normalize_text_field(plan.get("executive_summary", "")),
         "",
     ]
     lines.extend(_markdown_timeline_summary(plan.get("timeline_summary", [])))
@@ -1812,11 +2051,12 @@ def _build_hundred_day_one_pager_markdown(plan: dict[str, Any]) -> str:
     lines = [
         "# Executive One-Pager: 100-Day Technology Plan",
         "",
+        *_metadata_lines(plan, "100_day_plan_one_pager"),
         f"Investigation ID: `{plan.get('document_set_id', '')}`",
         f"Plan Type: `{plan.get('plan_type', '')}`",
         "",
         "## Executive Summary",
-        one_pager.get("executive_summary", ""),
+        normalize_text_field(one_pager.get("executive_summary", "")),
         "",
         "## Current State",
         one_pager.get("current_state", ""),

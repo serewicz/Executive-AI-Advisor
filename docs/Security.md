@@ -33,6 +33,14 @@ For normal deployment, set provider keys with environment variables on the serve
 
 For local demos, Streamlit provides a password input in the LLM Provider sidebar. Keys entered there are stored only in local `st.session_state` for the current Streamlit session. They are sent only to generation endpoints when needed and are not persisted by the application.
 
+Using a user-owned key can be useful for:
+
+- Cost tracking in the provider account that owns the key
+- Comparing Mock, OpenAI, Anthropic, and Grok/xAI outputs without code changes
+- Keeping provider and model choice visible for governance review
+
+Generated reports and Markdown exports include provider and model metadata, generation time, document set ID, and included document names. They never include API keys.
+
 Security rules:
 
 - Do not commit API keys to Git.
@@ -41,6 +49,12 @@ Security rules:
 - Use `.env` for local environment variables; `.env` and `.env.*` are ignored by Git.
 - If a key is accidentally committed, rotate or revoke it immediately and remove it from Git history as appropriate.
 - Use the Streamlit Clear API Keys button after local demos.
+
+## Processing Status And Data Handling
+
+The Streamlit processing UI shows document lifecycle status for `uploaded`, `parsing`, `parsed`, `chunking`, `chunked`, `embedding`, `embedded`, and `failed`. Use the visible completion message before running Q&A, board summary, diligence report, or 100-day plan workflows.
+
+Uploaded PDFs remain local in `data/uploads/` for the development stack. Treat this folder as sensitive working data. It is ignored by Git, but local users are still responsible for removing confidential demo materials when they are no longer needed.
 
 Run the tracked-file secret scanner before commits:
 

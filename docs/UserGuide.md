@@ -56,6 +56,19 @@ The standard workflow is:
 12. Evaluate output quality.
 13. Export Markdown memo, report, plan, or evaluation output.
 
+## LLM Provider Selection
+
+The Streamlit sidebar lets local demo users choose Mock, OpenAI, Anthropic, or Grok/xAI for answer and report generation. Mock remains the safest default for offline demonstrations and does not require an API key.
+
+Users may choose their own provider keys for four reasons:
+
+- Security: keys entered in Streamlit stay in the local session and are not saved by the app.
+- Cost tracking: using a user-owned provider key lets usage and spend appear directly in the provider account.
+- Provider control: users can compare Mock, OpenAI, Anthropic, and Grok outputs without changing application code.
+- Governance: reports show which provider and model were used when the output was generated.
+
+Provider and model metadata is shown in Streamlit reports and included in Markdown exports. API keys are never displayed or exported.
+
 ## Investigation Workspaces
 
 Investigation workspaces, also called document sets, isolate documents by company, deal, or diligence effort. Use one workspace per company, such as `SampleCo Diligence` or `FinTechCo Diligence`.
@@ -87,9 +100,15 @@ The document lifecycle status changes as processing progresses:
 - `uploaded`
 - `parsing`
 - `parsed`
+- `chunking`
 - `chunked`
+- `embedding`
 - `embedded`
 - `failed`
+
+Streamlit shows each document status with a progress indicator. Buttons are disabled while processing is active, failed documents show visible error messaging, and a successful full pipeline ends with: `Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan.`
+
+Use Refresh Status when another browser session, API call, or backend restart may have changed document state.
 
 ## Executive Q&A
 
@@ -291,6 +310,25 @@ The Streamlit UI supports Markdown downloads for:
 - Evaluation Report
 
 Markdown exports are plain text and include the structured tables where applicable. They do not include raw JSON.
+
+Export filenames are investigation-aware and include report type, plan type when applicable, and generation time. Examples:
+
+- `SampleCo_Diligence_technology_due_diligence_2026-06-10_1432.md`
+- `AcquisitionTargetCo_Diligence_100_day_plan_turnaround_2026-06-10_1432.md`
+- `FinTechCo_Diligence_board_summary_2026-06-10_1432.md`
+
+Each Markdown export starts with report metadata:
+
+- Investigation
+- Report Type
+- Plan Type, when applicable
+- Provider
+- Model
+- Generated At
+- Document Set ID
+- Included Documents
+
+Exports never include provider API keys.
 
 ## Citations And Evidence
 
