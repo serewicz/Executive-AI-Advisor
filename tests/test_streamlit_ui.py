@@ -1,15 +1,20 @@
 import streamlit as st
 
 from ui.streamlit_app import (
+    _build_hundred_day_plan_markdown,
+    _build_technology_report_markdown,
     _build_qa_payload,
     _clear_local_ui_state,
+    _download_key,
     _evaluation_missing_requirements,
     _evaluation_questions_from_text,
     _evaluation_questions_to_text,
     _evaluation_ready_documents,
+    _export_filename,
     _risk_counts,
     _remove_document_from_local_state,
     _sync_active_document_set_state,
+    build_export_filename,
     render_confidence_badge,
     render_risk_badge,
 )
@@ -197,3 +202,120 @@ def test_risk_counts_summarize_findings():
     )
 
     assert counts == {"red": 1, "yellow": 2, "green": 1}
+
+
+def test_export_filename_sanitizes_investigation_and_variant():
+    filename = build_export_filename("SampleCo Diligence / Q2", "100 day plan", "growth equity")
+
+    assert filename.startswith("SampleCo_Diligence_Q2_100_day_plan_growth_equity_")
+    assert filename.endswith(".md")
+    assert "/" not in filename
+
+
+def test_export_filename_differs_by_plan_type():
+    growth = build_export_filename("AcquisitionTargetCo", "100_day_plan", "growth_equity")
+    turnaround = build_export_filename("AcquisitionTargetCo", "100_day_plan", "turnaround")
+
+    assert growth != turnaround
+    assert "growth_equity" in growth
+    assert "turnaround" in turnaround
+
+
+def test_markdown_export_metadata_excludes_api_keys():
+    report = {
+        "document_set_id": "set-123",
+        "report_metadata": {
+            "investigation": "SampleCo Diligence",
+            "report_type": "technology_due_diligence",
+            "provider": "OpenAI",
+            "model": "gpt-4o-mini",
+            "generated_at": "2026-06-10 14:32",
+            "document_set_id": "set-123",
+            "included_documents": ["technology.pdf"],
+        },
+        "executive_summary": "SampleCo has moderate diligence risk.",
+        "overall_risk_rating": "yellow",
+        "confidence": "medium",
+        "risk_heatmap": [],
+        "top_5_risks": [],
+        "findings": [],
+        "management_questions": [],
+        "board_discussion_points": [],
+        "recommended_actions": [],
+        "thirty_sixty_ninety_day_plan": {},
+        "limitations": [],
+        "citations": [],
+        "llm_api_key": "sk-secret",
+        "openai_api_key": "sk-secret",
+    }
+
+    markdown = _build_technology_report_markdown(report)
+
+    assert "- Investigation: SampleCo Diligence" in markdown
+    assert "- Provider: OpenAI" in markdown
+    assert "- Model: gpt-4o-mini" in markdown
+    assert "technology.pdf" in markdown
+    assert "sk-secret" not in markdown
+
+
+def test_hundred_day_markdown_export_uses_plan_metadata_without_keys():
+    plan = {
+        "document_set_id": "set-123",
+        "plan_type": "turnaround",
+        "report_metadata": {
+            "investigation": "AcquisitionTargetCo Diligence",
+            "report_type": "100_day_plan",
+            "plan_type": "turnaround",
+            "provider": "Anthropic",
+            "model": "claude-3-5-sonnet-latest",
+            "generated_at": "2026-06-10 14:32",
+            "document_set_id": "set-123",
+            "included_documents": ["security.pdf"],
+        },
+        "overall_priority": "high",
+        "executive_summary": "Stabilize deployment and security controls first.",
+        "timeline_summary": [],
+        "plan_at_a_glance": [],
+        "risk_heatmap": [],
+        "days_1_30": [],
+        "days_31_60": [],
+        "days_61_90": [],
+        "days_91_100": [],
+        "success_metrics": [],
+        "board_checkpoints": [],
+        "dependencies": [],
+        "limitations": [],
+        "llm_api_key": "xai-secret",
+    }
+
+    markdown = _build_hundred_day_plan_markdown(plan)
+
+    assert "- Plan Type: turnaround" in markdown
+    assert "- Provider: Anthropic" in markdown
+    assert "xai-secret" not in markdown
+
+
+def test_download_key_changes_by_variant():
+    payload = {
+        "document_set_id": "set-123",
+        "report_metadata": {
+            "document_set_id": "set-123",
+            "generated_at": "2026-06-10 14:32",
+            "provider": "Mock",
+            "model": "mock",
+        },
+    }
+
+    assert _download_key(payload, "100_day_plan", "turnaround") != _download_key(
+        payload,
+        "100_day_plan",
+        "growth_equity",
+    )
+
+
+def test_export_filename_helper_uses_report_metadata():
+    payload = {"report_metadata": {"investigation": "FinTechCo Diligence"}}
+
+    filename = _export_filename(payload, "board_summary")
+
+    assert filename.startswith("FinTechCo_Diligence_board_summary_")

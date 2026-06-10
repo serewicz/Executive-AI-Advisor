@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.advisor.providers.base import SourceContext
 from app.advisor.providers.factory import get_llm_provider
 from app.advisor.schemas import Citation
+from app.advisor.text import normalize_text_field
 from app.diligence.prompts import (
     ASSESSMENT_FOCUS,
     ASSESSMENT_QUERIES,
@@ -155,7 +156,9 @@ def generate_technology_due_diligence_report(
 
     return TechnologyDiligenceReport(
         document_set_id=document_set.id,
-        executive_summary=provider_draft.executive_summary or _build_report_executive_summary(findings),
+        executive_summary=normalize_text_field(
+            provider_draft.executive_summary or _build_report_executive_summary(findings)
+        ),
         overall_risk_rating=overall_risk_rating(risk_ratings),
         confidence=overall_confidence([*confidences, provider_draft.confidence]),  # type: ignore[list-item]
         risk_heatmap=_build_risk_heatmap(findings),
