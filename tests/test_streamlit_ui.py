@@ -12,12 +12,12 @@ from ui.streamlit_app import (
     _evaluation_questions_to_text,
     _evaluation_ready_documents,
     _export_filename,
-    _processing_investigation_message,
     _processing_status_rows,
     _risk_counts,
     _remove_document_from_local_state,
     _sync_active_document_set_state,
     build_export_filename,
+    get_processing_summary,
     render_confidence_badge,
     render_risk_badge,
 )
@@ -210,65 +210,114 @@ def test_risk_counts_summarize_findings():
 def test_processing_status_rows_show_text_lifecycle_labels():
     rows = _processing_status_rows(
         [
-            {"filename": "01-executive-summary.pdf", "status": "embedded"},
-            {"filename": "02-technology-assessment.pdf", "status": "uploaded"},
-            {"filename": "03-security-assessment.pdf", "status": "failed", "error": "Chunking error"},
+            {"document_id": "a1b2c3d4-1111", "filename": "01-executive-summary.pdf", "status": "embedded"},
+            {"document_id": "e5f6g7h8-2222", "filename": "02-technology-assessment.pdf", "status": "uploaded"},
+            {
+                "document_id": "f1f2f3f4-3333",
+                "filename": "03-security-assessment.pdf",
+                "status": "failed",
+                "error": "Chunking error",
+            },
         ]
     )
 
     assert rows == [
         {
             "File": "01-executive-summary.pdf",
+            "ID": "a1b2c3d4",
             "Status": "Embedded",
-            "Parse": "Done",
-            "Chunk": "Done",
-            "Embed": "Done",
-            "Last Updated": "",
+            "Ready?": "Yes",
             "Notes": "Ready",
         },
         {
             "File": "02-technology-assessment.pdf",
+            "ID": "e5f6g7h8",
             "Status": "Uploaded",
-            "Parse": "Pending",
-            "Chunk": "Pending",
-            "Embed": "Pending",
-            "Last Updated": "",
+            "Ready?": "No",
             "Notes": "Needs processing",
         },
         {
             "File": "03-security-assessment.pdf",
+            "ID": "f1f2f3f4",
             "Status": "Failed",
-            "Parse": "Failed",
-            "Chunk": "Failed",
-            "Embed": "Failed",
-            "Last Updated": "",
+            "Ready?": "No",
             "Notes": "Chunking error",
         },
     ]
 
 
-def test_processing_investigation_message_prioritizes_failed_documents():
-    message_type, message = _processing_investigation_message(
+def test_processing_summary_prioritizes_failed_documents():
+    summary = get_processing_summary(
         [
             {"status": "embedded"},
             {"status": "failed"},
         ]
     )
 
-    assert message_type == "error"
-    assert message == "One or more documents failed. Review the Notes column."
+    assert summary.status_level == "error"
+    assert summary.status_message == "One or more documents failed. Review the Notes column."
+    assert summary.has_failed is True
 
 
-def test_processing_investigation_message_reports_complete_when_all_ready():
-    message_type, message = _processing_investigation_message(
+def test_processing_summary_reports_complete_when_all_ready():
+    summary = get_processing_summary(
         [
             {"status": "embedded"},
             {"status": "indexed"},
         ]
     )
 
-    assert message_type == "success"
-    assert "Processing complete" in message
+    assert summary.status_level == "success"
+    assert "Processing complete" in summary.status_message
+    assert summary.all_ready is True
+
+
+def test_processing_summary_reports_pending_without_complete_message():
+    summary = get_processing_summary(
+        [
+            {"status": "embedded"},
+            {"status": "uploaded"},
+        ]
+    )
+
+    assert summary.status_level == "info"
+    assert summary.status_message == "Some documents still need processing."
+    assert summary.has_pending is True
+    assert summary.all_ready is False
+    assert "Processing complete" not in summary.status_message
+
+
+def test_processing_summary_reports_no_documents():
+    summary = get_processing_summary([])
+
+    assert summary.total_documents == 0
+    assert summary.status_message == "No documents uploaded."
+    assert summary.status_level == "info"
+
+
+def test_processing_rows_keep_duplicate_filenames_when_ids_differ():
+    rows = _processing_status_rows(
+        [
+            {"document_id": "11111111-aaaa", "filename": "assessment.pdf", "status": "embedded"},
+            {"document_id": "22222222-bbbb", "filename": "assessment.pdf", "status": "uploaded"},
+        ]
+    )
+
+    assert len(rows) == 2
+    assert rows[0]["ID"] == "11111111"
+    assert rows[1]["ID"] == "22222222"
+
+
+def test_processing_rows_drop_duplicate_document_ids():
+    rows = _processing_status_rows(
+        [
+            {"document_id": "11111111-aaaa", "filename": "assessment.pdf", "status": "embedded"},
+            {"document_id": "11111111-aaaa", "filename": "assessment.pdf", "status": "uploaded"},
+        ]
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["Status"] == "Embedded"
 
 
 def test_all_documents_ready_only_for_embedded_or_indexed_documents():
