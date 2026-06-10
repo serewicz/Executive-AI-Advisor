@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -47,6 +48,22 @@ DEFAULT_LLM_MODELS = {
     "grok": "grok-4.3",
 }
 READY_DOCUMENT_STATUSES = {"embedded", "indexed"}
+PENDING_DOCUMENT_STATUSES = {"uploaded", "parsed", "chunked", "parsing", "chunking", "embedding"}
+
+
+@dataclass(frozen=True)
+class ProcessingSummary:
+    total_documents: int
+    ready_documents: int
+    pending_documents: int
+    failed_documents: int
+    all_ready: bool
+    has_pending: bool
+    has_failed: bool
+    status_message: str
+    status_level: str
+
+
 LOCAL_UI_STATE_KEYS = [
     "document_id",
     "summary_document_id",
@@ -71,7 +88,6 @@ LOCAL_UI_STATE_KEYS = [
     "anthropic_api_key",
     "xai_api_key",
     "processing_active",
-    "processing_results",
 ]
 
 
@@ -135,7 +151,6 @@ def _initialize_state() -> None:
         "anthropic_api_key": "",
         "xai_api_key": "",
         "processing_active": False,
-        "processing_results": [],
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -455,13 +470,14 @@ def _render_processing_section() -> None:
         detail = _load_active_document_set_detail()
         if detail:
             _sync_active_document_set_state(detail)
-        documents = st.session_state.uploaded_documents
-        _render_processing_status_table(documents)
+        documents = _dedupe_documents_by_id(st.session_state.uploaded_documents)
+        summary = get_processing_summary(documents)
+        _render_processing_status_table(documents, summary)
         process_disabled = (
             not document_set_id
-            or not documents
+            or summary.total_documents == 0
             or processing_active
-            or _all_documents_ready(documents)
+            or summary.all_ready
         )
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -469,11 +485,14 @@ def _render_processing_section() -> None:
         with col2:
             process_clicked = st.button("Process All", use_container_width=True, disabled=process_disabled)
 
+        if summary.all_ready:
+            st.caption("All documents are ready. No processing needed.")
+
         if refresh_clicked:
             detail = _load_active_document_set_detail()
             if detail:
                 _sync_active_document_set_state(detail)
-                st.success("Investigation status refreshed.")
+                st.rerun()
 
         if process_clicked:
             detail = _load_active_document_set_detail()
@@ -488,15 +507,10 @@ def _render_processing_section() -> None:
                 response = _post_json(f"/document-sets/{document_set_id}/process", {})
             st.session_state.processing_active = False
             if response:
-                documents = response.get("documents", [])
-                st.session_state.processing_results = documents
                 refreshed = _load_active_document_set_detail()
                 if refreshed:
                     _sync_active_document_set_state(refreshed)
-                _render_processing_completion(documents)
-
-        if st.session_state.get("processing_results") and not process_clicked:
-            _render_processing_completion(st.session_state.processing_results)
+                st.rerun()
         st.caption("Runs parse, chunk, and embed for documents in the active investigation that need processing.")
         return
 
@@ -1330,14 +1344,11 @@ def _evaluation_missing_requirements(
     return missing
 
 
-def _render_processing_status_table(documents: list[dict[str, Any]]) -> None:
-    if not documents:
-        st.info("Upload PDFs into the active investigation before processing.")
-        return
-
+def _render_processing_status_table(documents: list[dict[str, Any]], summary: ProcessingSummary) -> None:
     st.markdown("#### Document Status")
-    st.table(_processing_status_rows(documents))
-    _render_investigation_processing_message(documents)
+    if documents:
+        st.table(_processing_status_rows(documents))
+    _render_processing_summary_message(summary)
 
 
 def _render_single_document_status(filename: str, status: str, error_message: str = "") -> None:
@@ -1348,52 +1359,89 @@ def _render_single_document_status(filename: str, status: str, error_message: st
 
 
 def _render_processing_completion(documents: list[dict[str, Any]]) -> None:
-    if not documents:
-        return
-    _render_investigation_processing_message(documents)
+    _render_processing_summary_message(get_processing_summary(_dedupe_documents_by_id(documents)))
 
 
-def _render_investigation_processing_message(documents: list[dict[str, Any]]) -> None:
-    message_type, message = _processing_investigation_message(documents)
-    if message_type == "success":
-        st.success(message)
-    elif message_type == "error":
-        st.error(message)
+def _render_processing_summary_message(summary: ProcessingSummary) -> None:
+    if summary.status_level == "success":
+        st.success(summary.status_message)
+    elif summary.status_level == "error":
+        st.error(summary.status_message)
     else:
-        st.info(message)
+        st.info(summary.status_message)
 
 
 def _processing_status_rows(documents: list[dict[str, Any]]) -> list[dict[str, str]]:
-    return [_processing_status_row(document) for document in documents]
+    return [_processing_status_row(document) for document in _dedupe_documents_by_id(documents)]
 
 
 def _processing_status_row(document: dict[str, Any]) -> dict[str, str]:
     status = _normalized_status(str(document.get("status", "uploaded")))
+    document_id = str(document.get("document_id") or document.get("id") or "")
     return {
         "File": str(document.get("filename", "Untitled document")),
+        "ID": document_id[:8],
         "Status": _display_status(status),
-        "Parse": _parse_label(status),
-        "Chunk": _chunk_label(status),
-        "Embed": _embed_label(status),
-        "Last Updated": str(document.get("updated_at") or document.get("last_updated") or ""),
+        "Ready?": "Yes" if status in READY_DOCUMENT_STATUSES else "No",
         "Notes": _processing_notes(document, status),
     }
 
 
-def _processing_investigation_message(documents: list[dict[str, Any]]) -> tuple[str, str]:
-    statuses = [_normalized_status(str(document.get("status", "uploaded"))) for document in documents]
-    if any(status == "failed" for status in statuses):
-        return "error", "One or more documents failed. Review the Notes column."
-    if statuses and all(status in READY_DOCUMENT_STATUSES for status in statuses):
-        return "success", "Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan."
-    return "info", "Some documents still need processing."
+def get_processing_summary(documents: list[dict[str, Any]]) -> ProcessingSummary:
+    deduped_documents = _dedupe_documents_by_id(documents)
+    statuses = [_normalized_status(str(document.get("status", "uploaded"))) for document in deduped_documents]
+    total_documents = len(statuses)
+    ready_documents = sum(1 for status in statuses if status in READY_DOCUMENT_STATUSES)
+    failed_documents = sum(1 for status in statuses if status == "failed")
+    pending_documents = sum(1 for status in statuses if status in PENDING_DOCUMENT_STATUSES)
+    all_ready = total_documents > 0 and ready_documents == total_documents
+    has_failed = failed_documents > 0
+    has_pending = pending_documents > 0
+
+    if total_documents == 0:
+        status_level = "info"
+        status_message = "No documents uploaded."
+    elif has_failed:
+        status_level = "error"
+        status_message = "One or more documents failed. Review the Notes column."
+    elif has_pending:
+        status_level = "info"
+        status_message = "Some documents still need processing."
+    elif all_ready:
+        status_level = "success"
+        status_message = "Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan."
+    else:
+        status_level = "info"
+        status_message = "Some documents still need processing."
+
+    return ProcessingSummary(
+        total_documents=total_documents,
+        ready_documents=ready_documents,
+        pending_documents=pending_documents,
+        failed_documents=failed_documents,
+        all_ready=all_ready,
+        has_pending=has_pending,
+        has_failed=has_failed,
+        status_message=status_message,
+        status_level=status_level,
+    )
 
 
 def _all_documents_ready(documents: list[dict[str, Any]]) -> bool:
-    return bool(documents) and all(
-        _normalized_status(str(document.get("status", "uploaded"))) in READY_DOCUMENT_STATUSES
-        for document in documents
-    )
+    return get_processing_summary(documents).all_ready
+
+
+def _dedupe_documents_by_id(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped_documents = []
+    seen_document_ids = set()
+    for document in documents:
+        document_id = str(document.get("document_id") or document.get("id") or "")
+        if document_id:
+            if document_id in seen_document_ids:
+                continue
+            seen_document_ids.add(document_id)
+        deduped_documents.append(document)
+    return deduped_documents
 
 
 def _normalized_status(status: str) -> str:
@@ -1413,36 +1461,6 @@ def _display_status(status: str) -> str:
         "failed": "Failed",
     }
     return labels.get(status, status.title())
-
-
-def _parse_label(status: str) -> str:
-    if status == "failed":
-        return "Failed"
-    if status == "parsing":
-        return "Running"
-    if status in {"parsed", "chunking", "chunked", "embedding", "embedded", "indexed"}:
-        return "Done"
-    return "Pending"
-
-
-def _chunk_label(status: str) -> str:
-    if status == "failed":
-        return "Failed"
-    if status == "chunking":
-        return "Running"
-    if status in {"chunked", "embedding", "embedded", "indexed"}:
-        return "Done"
-    return "Pending"
-
-
-def _embed_label(status: str) -> str:
-    if status == "failed":
-        return "Failed"
-    if status == "embedding":
-        return "Running"
-    if status in READY_DOCUMENT_STATUSES:
-        return "Done"
-    return "Pending"
 
 
 def _processing_notes(document: dict[str, Any], status: str) -> str:
@@ -1563,7 +1581,6 @@ def _set_active_document_set(document_set_id: str, name: str) -> None:
     st.session_state.technology_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
-    st.session_state.processing_results = []
 
 
 def _clear_active_document_set() -> None:
@@ -1579,12 +1596,11 @@ def _clear_active_document_set() -> None:
     st.session_state.technology_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
-    st.session_state.processing_results = []
 
 
 def _clear_local_ui_state() -> None:
     for key in LOCAL_UI_STATE_KEYS:
-        if key in {"uploaded_documents", "selected_documents", "processing_results"}:
+        if key in {"uploaded_documents", "selected_documents"}:
             st.session_state[key] = []
         elif key in {"qa_response", "board_summary", "technology_report", "hundred_day_plan", "evaluation_response"}:
             st.session_state[key] = None
@@ -1657,7 +1673,6 @@ def _remove_document_from_local_state(document_id: str | None) -> None:
     st.session_state.technology_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
-    st.session_state.processing_results = []
 
 
 def _extract_uuid_from_text(text: str) -> str | None:
