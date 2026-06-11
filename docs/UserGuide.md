@@ -230,6 +230,51 @@ The executive risk heatmap summarizes each diligence category in one table:
 
 The heatmap is generated from the same scoped diligence findings as the report, so it reflects only the active investigation workspace.
 
+## CRA Readiness Assessment
+
+The CRA Readiness Assessment evaluates whether an active investigation has evidence relevant to EU Cyber Resilience Act readiness. It is designed for investors, acquirers, boards, and CTOs reviewing software or product companies that may place products with digital elements on the EU market.
+
+The assessment is scoped only to the active investigation workspace and does not search globally.
+
+It reviews:
+
+- scope and EU market exposure evidence
+- secure-by-design practices
+- vulnerability management
+- SBOM and dependency visibility
+- security update process
+- incident and exploited vulnerability reporting readiness
+- technical documentation
+- supplier and third-party component risk
+- user transparency
+- lifecycle support and maintenance policy
+
+Recommended evidence to upload:
+
+- product security documentation
+- architecture and security design documents
+- secure development lifecycle policy
+- threat models
+- vulnerability disclosure policy
+- vulnerability management runbook
+- SBOM or dependency inventory
+- release and patch process
+- incident reporting runbook
+- supplier security review
+- support, update, and end-of-life policy
+
+Readiness uses red/yellow/green:
+
+- `red`: no evidence of process, material gaps, or explicit weakness.
+- `yellow`: partial process exists but evidence is incomplete, inconsistent, or immature.
+- `green`: evidence shows a defined, repeatable process with ownership and documentation.
+
+Confidence uses high/medium/low based on citation quantity and evidence spread.
+
+Outputs include executive summary, overall readiness, top gaps, findings by CRA category, missing evidence, management questions, board discussion points, recommended actions, a 90-day readiness plan, limitations, and citations. The Streamlit UI can export the assessment as Markdown.
+
+This is a readiness assessment, not legal advice. Legal counsel should confirm applicability, product classification, conformity assessment pathway, and reporting obligations.
+
 ## 100-Day Technology Plan
 
 The 100-Day Technology Plan Generator converts Technology Due Diligence Report findings into a sequenced operating plan for a CTO, operating partner, or portfolio company. It does not regenerate findings from scratch. It consumes the existing findings, risk ratings, confidence levels, business impacts, recommended owners, and citations.

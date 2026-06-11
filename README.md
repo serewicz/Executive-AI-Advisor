@@ -38,6 +38,7 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 - Scope Q&A and board summaries to the active investigation by default
 - Run technology due diligence assessments
 - Generate technology due diligence reports for active investigations
+- Generate Cyber Resilience Act readiness assessments for active investigations
 - Generate scenario-specific 100-day technology operating plans from diligence findings
 - Review 100-day plan executive one-pagers, timeline summaries, risk heatmaps, deliverables, owners, and board checkpoints
 - Generate board summaries with citations, confidence, and limitations
@@ -134,7 +135,7 @@ Streamlit renders the plan in two tabs:
 - Executive One-Pager: concise board-readable current state, target state, top priorities, first 30 days, board decisions, success metrics, and dependencies.
 - Full 100-Day Plan: timeline summary, plan at a glance, risk heatmap, phase-based actions, deliverables, success metrics, citations, board checkpoints, dependencies, and limitations.
 
-Risk and confidence scoring are shown in the Technology Due Diligence Report and carried into the 100-day plan risk heatmap. The heatmap includes category, risk rating, confidence, evidence count, and primary recommended action. Markdown downloads are available for the executive one-pager, full 100-day plan, diligence report, board memo, and evaluation report. Export filenames include the investigation name, report type, plan type when applicable, and generation timestamp.
+Risk and confidence scoring are shown in the Technology Due Diligence Report and carried into the 100-day plan risk heatmap. The heatmap includes category, risk rating, confidence, evidence count, and primary recommended action. CRA Readiness Assessment adds EU Cyber Resilience Act-oriented readiness review for software/product companies, including missing evidence, management questions, board discussion points, and a 90-day readiness plan. Markdown downloads are available for the executive one-pager, full 100-day plan, diligence report, CRA readiness assessment, board memo, and evaluation report. Export filenames include the investigation name, report type, plan type when applicable, and generation timestamp.
 
 ## Database Migrations
 
@@ -161,6 +162,7 @@ Implemented:
 - cited Q&A
 - board summary generation
 - technology due diligence report and 100-day plan generation
+- CRA readiness assessment
 - executive one-pager, timeline summary, and risk heatmap outputs for technology planning
 - Streamlit UI
 - deterministic evaluation framework

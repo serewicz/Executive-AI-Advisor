@@ -46,7 +46,8 @@ flowchart LR
 9. Board memo generation: board summary prompts create structured memo sections using retrieved chunks only.
 10. Technology diligence: the diligence service scores architecture, security, technical debt, key person risk, and AI readiness using retrieved evidence.
 11. Technology due diligence report: targeted category retrieval across the active document set produces red/yellow/green findings, confidence levels, risk heatmap rows, management questions, board discussion points, actions, and citations.
-12. 100-day planning: diligence findings are converted into scenario-specific operating plans with executive one-pagers, timeline summaries, risk heatmaps, deliverables, success metrics, board checkpoints, dependencies, and Markdown exports.
+12. CRA readiness assessment: targeted document-set retrieval produces Cyber Resilience Act readiness findings, missing evidence, management questions, board discussion points, actions, and citations.
+13. 100-day planning: diligence findings are converted into scenario-specific operating plans with executive one-pagers, timeline summaries, risk heatmaps, deliverables, success metrics, board checkpoints, dependencies, and Markdown exports.
 13. Evaluation: advisor answers are scored for citation quality, groundedness, relevance, and executive usefulness.
 
 ## Core Components
@@ -61,6 +62,7 @@ flowchart LR
 - LLM providers: mock provider by default, OpenAI chat provider optionally.
 - Advisor service: cited Q&A and board memo generation.
 - Diligence service: technology due diligence assessments and investigation-scoped reports with scores, risk ratings, confidence levels, risk heatmaps, recommendations, and citations.
+- Compliance service: CRA readiness assessments with scoped retrieval, deterministic readiness scoring, missing-evidence lists, limitations, and citations.
 - Planning service: 100-day technology plans generated from diligence findings, including executive one-pagers, timeline summaries, scenario-specific actions, deliverables, owners, success metrics, and board checkpoints.
 - Evaluation service: deterministic scoring and persistent evaluation runs.
 
@@ -143,6 +145,14 @@ Risk ratings are deterministic directional indicators:
 Confidence is based on the quantity and spread of retrieved evidence. Reports include limitations because retrieval may miss evidence, source documents may be incomplete, and generated outputs do not replace management interviews, technical walkthroughs, security testing, legal advice, financial advice, or investment advice.
 
 Each report also includes an executive risk heatmap generated from the category findings. Heatmap rows include category, risk rating, confidence, evidence count, and the primary recommended action. Because reports are generated from the selected document set, the heatmap is scoped to the active investigation.
+
+## CRA Readiness Assessments
+
+CRA readiness assessments are generated for a selected document set, not globally. The compliance service runs targeted retrieval queries for scope, secure by design, vulnerability management, SBOM, security updates, incident reporting, technical documentation, supplier risk, user transparency, and lifecycle support.
+
+The service builds deterministic red/yellow/green readiness findings from retrieved evidence, lists missing evidence by category, and returns citations, confidence, management questions, board discussion points, recommended actions, and a 90-day readiness plan. The assessment includes a limitation that it is not legal advice and that legal counsel should confirm applicability, product classification, conformity assessment pathway, and reporting obligations.
+
+Streamlit renders CRA readiness as an executive report and provides Markdown export with provider/model metadata and cited evidence.
 
 ## 100-Day Technology Plans
 

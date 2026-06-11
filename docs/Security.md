@@ -41,6 +41,8 @@ Using a user-owned key can be useful for:
 
 Generated reports and Markdown exports include provider and model metadata, generation time, document set ID, and included document names. They never include API keys.
 
+CRA Readiness Assessment is a diligence and governance readiness workflow. It is not legal advice and does not certify compliance. Legal counsel should confirm applicability, product classification, conformity assessment pathway, and reporting obligations before leadership relies on CRA-related conclusions.
+
 Security rules:
 
 - Do not commit API keys to Git.
