@@ -157,7 +157,37 @@ Show the Executive Risk Heatmap:
 
 Good input packets include executive summary, technology assessment, security assessment, engineering organization review, AI readiness assessment, roadmap, cloud cost analysis, and integration readiness materials.
 
-### 5. Generate 100-Day Technology Plan
+### 5. Generate CRA Readiness Assessment
+
+Click Generate CRA Readiness Assessment for the active investigation.
+
+Talking point:
+
+The CRA Readiness Assessment is scoped to the selected investigation and is designed for software or product companies that may need Cyber Resilience Act readiness planning. It reviews evidence for scope, secure by design, vulnerability management, SBOM and dependency visibility, security updates, incident reporting, technical documentation, supplier risk, user transparency, and lifecycle support.
+
+Explain the readiness ratings:
+
+- Red means no evidence of process, material gaps, or explicit weakness.
+- Yellow means partial process exists, but evidence is incomplete, inconsistent, or immature.
+- Green means retrieved evidence shows a defined, repeatable process with ownership and documentation.
+- Confidence indicates evidence strength and citation support.
+
+Show:
+
+- Overall CRA Readiness
+- Top Gaps
+- Findings by category
+- Missing Evidence
+- Management Questions
+- Board Discussion Points
+- 90-Day CRA Readiness Plan
+- Limitations and citations
+
+Important caveat:
+
+This is a readiness assessment, not legal advice. Legal counsel should confirm applicability, product classification, conformity assessment pathway, and reporting obligations.
+
+### 6. Generate 100-Day Technology Plan
 
 Choose a plan type:
 
@@ -205,7 +235,7 @@ Open the Full 100-Day Plan tab:
 
 The full output includes a Timeline Summary, Plan at a Glance, Risk Heatmap, concrete deliverables, success metrics, structured board checkpoints, dependencies, limitations, and citations so management can inspect the source evidence.
 
-### 6. Generate Board Summary
+### 7. Generate Board Summary
 
 Choose a summary type such as:
 
@@ -219,7 +249,7 @@ Talking point:
 
 The board memo is structured for executive review: summary, risks, evidence, board questions, recommended actions, limitations, confidence, and citations.
 
-### 7. Inspect Citations
+### 8. Inspect Citations
 
 Open the citation cards.
 
@@ -229,7 +259,7 @@ Every material claim should be reviewable against source excerpts and page range
 
 Citations show metadata first, concise relevant excerpts second, and full source text only when the user asks to inspect it.
 
-### 8. Run Evaluation
+### 9. Run Evaluation
 
 Open the Evaluation section and click Run Evaluation.
 
@@ -237,9 +267,9 @@ Talking point:
 
 Evaluation is currently single-document. It is part of trust, not an afterthought. The system scores citation quality, groundedness, relevance, and executive usefulness.
 
-### 9. Export Markdown Outputs
+### 10. Export Markdown Outputs
 
-Use Download Board Memo.md, Download Technology Due Diligence Report.md, Download Executive One-Pager.md, Download 100-Day Technology Plan.md, or Download Evaluation Report.md.
+Use Download Board Memo.md, Download Technology Due Diligence Report.md, Download CRA Readiness Assessment.md, Download Executive One-Pager.md, Download 100-Day Technology Plan.md, or Download Evaluation Report.md.
 
 Talking point:
 
