@@ -97,6 +97,10 @@ Open:
 - [Governance](docs/Governance.md)
 - [Security](docs/Security.md)
 
+## Development Workflow
+
+Use feature branches and pull requests into `main`. See [Contributing](CONTRIBUTING.md), [Branch Protection](docs/BranchProtection.md), and [Release Checklist](docs/ReleaseChecklist.md) for the recommended protected-main workflow, required CI check, and release validation steps.
+
 ## Methodology
 
 Executive AI Advisor automates portions of the CTO Operating System advisory methodology through document ingestion, retrieval, citations, diligence reports, board briefs, and 100-day technology plans. See [Methodology](docs/Methodology.md) for how this software platform relates to the CTO Operating System repository.
