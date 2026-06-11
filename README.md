@@ -105,6 +105,19 @@ Use feature branches and pull requests into `main`. See [Contributing](CONTRIBUT
 
 Executive AI Advisor automates portions of the CTO Operating System advisory methodology through document ingestion, retrieval, citations, diligence reports, board briefs, and 100-day technology plans. See [Methodology](docs/Methodology.md) for how this software platform relates to the CTO Operating System repository.
 
+## Technology Leadership Portfolio
+
+This repository is part of a broader Technology Leadership Portfolio: a practical system for assessing, operating, governing, implementing, and measuring technology organizations.
+
+| Layer | Repository | Purpose |
+|---|---|---|
+| Methodology | [CTO Operating System](https://github.com/serewicz/cto-operating-system) | Defines CTO, diligence, governance, board reporting, and operating partner frameworks |
+| Assessment | [Executive AI Advisor](https://github.com/serewicz/Executive-AI-Advisor) | Converts company documents into diligence reports, board briefs, CRA readiness assessments, AI governance assessments, and 100-day technology plans |
+| Implementation | [K8s Platform Blueprint](https://github.com/serewicz/k8s-platform-blueprint) | Provides implementation patterns for platform governance, FinOps, observability, policy controls, and compliance evidence |
+| Measurement | [Engineering Operating Metrics](https://github.com/serewicz/engineering-operating-metrics) | Measures delivery flow, review quality, rework, engineering cost, AI usage cost, risk, and engineering governance |
+
+This repository provides the assessment and planning layer. See [Technology Leadership Portfolio](docs/Technology-Leadership-Portfolio.md).
+
 ## Demo Datasets
 
 Synthetic diligence datasets are available for local demos and testing:
