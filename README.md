@@ -33,10 +33,10 @@ Executive assessment of AI maturity, governance, privacy, security, auditability
 
 # Example Executive Outputs
 
-- [Technology Risk Scorecard](examples/technology_risk_scorecard.md)
-- [Board Brief](examples/board_brief.md)
-- [100-Day Technology Plan](examples/100_day_technology_plan.md)
-- [AI Governance Assessment](examples/ai_governance_assessment.md)
+- [Technology Risk Scorecard](examples/technology-risk-scorecard.md)
+- [Board Brief](examples/board-brief.md)
+- [100-Day Technology Plan](examples/100-day-technology-plan.md)
+- [AI Governance Assessment](examples/ai-governance-assessment.md)
 
 ## Who It Is For
 
