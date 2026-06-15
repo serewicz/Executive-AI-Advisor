@@ -100,10 +100,13 @@ class AIGovernanceAssessmentItem(BaseModel):
     owner: RecommendedOwner
     timeline: str
     evidence: list[Citation] = []
+    success_metric: str
 
 
 class AIGovernanceAssessmentResponse(BaseModel):
     document_set_id: UUID
+    overall_maturity: MaturityLevel
+    risk_rating: RiskRating
     executive_summary: str
     items: list[AIGovernanceAssessmentItem]
     confidence: Confidence

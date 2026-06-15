@@ -1,6 +1,6 @@
 # Executive AI Advisor
 
-Executive AI Advisor is a secure, retrieval-augmented AI system for converting SEC filings, diligence reports, and technology assessments into cited executive summaries, board-level risk memos, and decision-support outputs.
+Executive AI Advisor is AI-powered executive decision support for technology diligence, board briefs, risk scorecards, AI governance, and 100-day technology plans.
 
 ## Who It Is For
 
@@ -28,6 +28,10 @@ Executive AI Advisor is a secure, retrieval-augmented AI system for converting S
 
 ## Current Capabilities
 
+- Generate Technology Risk Scorecards with red/yellow/green ratings, confidence levels, business impact, owners, timelines, and success metrics
+- Generate Board Briefs with executive summaries, top risks, management questions, recommended decisions, citations, confidence, and limitations
+- Generate 100-Day Technology Plans for growth equity, acquisition integration, and turnaround scenarios
+- Generate AI Governance Assessments covering AI use-case clarity, data handling, model/output evaluation, human oversight, cost controls, auditability, and policy readiness
 - Upload PDFs with source type and classification metadata
 - Create diligence workspaces and upload multiple PDFs per investigation
 - Parse PDFs into page-level records
@@ -95,6 +99,13 @@ Open:
 - [Governance](docs/Governance.md)
 - [Security](docs/Security.md)
 
+## Example Outputs
+
+- [Example Technology Risk Scorecard](docs/examples/example_technology_risk_scorecard.md)
+- [Example Board Brief](docs/examples/example_board_brief.md)
+- [Example 100-Day Technology Plan](docs/examples/example_100_day_technology_plan.md)
+- [Example AI Governance Assessment](docs/examples/example_ai_governance_assessment.md)
+
 ## Demo Datasets
 
 Synthetic diligence datasets are available for local demos and testing:
@@ -122,9 +133,9 @@ Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:
 
 See [Architecture](docs/Architecture.md) for the full system design.
 
-## Executive Modules
+## Executive Decision Modules
 
-The Streamlit UI includes an **Executive Modules** section for board, CEO, PE operating partner, and fractional CTO workflows. These outputs reuse the existing ingestion, retrieval, citation, diligence, and planning pipeline instead of duplicating RAG logic.
+The Streamlit UI includes an **Executive Decision Modules** section for board, CEO, PE operating partner, and fractional CTO workflows. These outputs reuse the existing ingestion, retrieval, citation, diligence, and planning pipeline instead of duplicating RAG logic.
 
 Available modules:
 

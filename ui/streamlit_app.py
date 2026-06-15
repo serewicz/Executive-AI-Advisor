@@ -678,7 +678,7 @@ def _render_board_memo(response: dict[str, Any]) -> None:
 
 
 def _render_executive_modules_section() -> None:
-    st.header("Executive Modules")
+    st.header("Executive Decision Modules")
     st.markdown(
         '<div class="section-note">Board-facing outputs that translate technical findings into business impact, ownership, timelines, and measurable actions.</div>',
         unsafe_allow_html=True,
@@ -705,17 +705,17 @@ def _render_executive_modules_section() -> None:
     payload_base = {"document_set_id": document_set_id, "top_k": top_k, **_generation_provider_payload()}
 
     with buttons[0]:
-        if st.button("Risk Scorecard", disabled=disabled, use_container_width=True):
+        if st.button("Technology Risk Scorecard", disabled=disabled, use_container_width=True):
             response = _post_json("/executive/risk-scorecard", payload_base)
             if response:
                 st.session_state.executive_risk_scorecard = _with_report_metadata(response, "technology_risk_scorecard")
     with buttons[1]:
-        if st.button("Board Brief", disabled=disabled, use_container_width=True):
+        if st.button("Board Brief Generator", disabled=disabled, use_container_width=True):
             response = _post_json("/executive/board-brief", payload_base)
             if response:
                 st.session_state.executive_board_brief = _with_report_metadata(response, "board_brief")
     with buttons[2]:
-        if st.button("100-Day Plan", disabled=disabled, use_container_width=True):
+        if st.button("100-Day Technology Plan", disabled=disabled, use_container_width=True):
             response = _post_json("/executive/100-day-plan", {**payload_base, "plan_type": plan_type})
             if response:
                 st.session_state.executive_hundred_day_plan = _with_report_metadata(
@@ -724,12 +724,19 @@ def _render_executive_modules_section() -> None:
                     plan_type,
                 )
     with buttons[3]:
-        if st.button("AI Governance", disabled=disabled, use_container_width=True):
+        if st.button("AI Governance Assessment", disabled=disabled, use_container_width=True):
             response = _post_json("/executive/ai-governance-assessment", payload_base)
             if response:
                 st.session_state.ai_governance_assessment = _with_report_metadata(response, "ai_governance_assessment")
 
-    tabs = st.tabs(["Risk Scorecard", "Board Brief", "100-Day Plan", "AI Governance"])
+    tabs = st.tabs(
+        [
+            "Technology Risk Scorecard",
+            "Board Brief Generator",
+            "100-Day Technology Plan",
+            "AI Governance Assessment",
+        ]
+    )
     with tabs[0]:
         if st.session_state.executive_risk_scorecard:
             _render_executive_risk_scorecard(st.session_state.executive_risk_scorecard)
@@ -820,7 +827,11 @@ def _render_executive_board_brief(brief: dict[str, Any]) -> None:
 def _render_ai_governance_assessment(report: dict[str, Any]) -> None:
     st.subheader("AI Governance Assessment")
     _render_report_metadata(report)
-    _render_confidence(report.get("confidence", "low"))
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Overall Maturity", str(report.get("overall_maturity", "medium")).title())
+    col2.markdown(render_risk_badge(str(report.get("risk_rating", "yellow"))), unsafe_allow_html=True)
+    with col3:
+        _render_confidence(report.get("confidence", "low"))
     st.markdown("#### Executive Summary")
     st.markdown(normalize_text_field(report.get("executive_summary", "")))
     st.dataframe(
@@ -831,6 +842,7 @@ def _render_ai_governance_assessment(report: dict[str, Any]) -> None:
                 "Risk": str(item.get("risk_level", "")).title(),
                 "Owner": item.get("owner", ""),
                 "Timeline": item.get("timeline", ""),
+                "Success Metric": item.get("success_metric", ""),
             }
             for item in report.get("items", [])
         ],
@@ -845,6 +857,7 @@ def _render_ai_governance_assessment(report: dict[str, Any]) -> None:
             st.markdown(f"**Next Step:** {item.get('recommended_next_step', '')}")
             st.markdown(f"**Owner:** {item.get('owner', '')}")
             st.markdown(f"**Timeline:** {item.get('timeline', '')}")
+            st.markdown(f"**Success Metric:** {item.get('success_metric', '')}")
             _render_citations(item.get("evidence", []), title="Evidence", use_expanders=False)
     _render_limitations(report.get("limitations", []))
     markdown = _build_ai_governance_assessment_markdown(report)
@@ -2289,13 +2302,15 @@ def _build_ai_governance_assessment_markdown(report: dict[str, Any]) -> str:
         "",
         *_metadata_lines(report, "ai_governance_assessment"),
         f"Investigation ID: `{report.get('document_set_id', '')}`",
+        f"Overall AI Governance Maturity: **{str(report.get('overall_maturity', '')).title()}**",
+        f"Risk Rating: **{str(report.get('risk_rating', '')).title()}**",
         f"Confidence: **{str(report.get('confidence', '')).title()}**",
         "",
         "## Executive Summary",
         normalize_text_field(report.get("executive_summary", "")),
         "",
-        "| Category | Maturity | Risk | Owner | Timeline | Next Step |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Category | Maturity | Risk | Owner | Timeline | Success Metric | Next Step |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in report.get("items", []):
         lines.append(
@@ -2307,6 +2322,7 @@ def _build_ai_governance_assessment_markdown(report: dict[str, Any]) -> str:
                     str(item.get("risk_level", "")).title(),
                     str(item.get("owner", "")).replace("|", "\\|"),
                     str(item.get("timeline", "")).replace("|", "\\|"),
+                    str(item.get("success_metric", "")).replace("|", "\\|"),
                     str(item.get("recommended_next_step", "")).replace("|", "\\|"),
                 ]
             )
@@ -2321,6 +2337,7 @@ def _build_ai_governance_assessment_markdown(report: dict[str, Any]) -> str:
                 f"- Risk Level: {str(item.get('risk_level', '')).title()}",
                 f"- Owner: {item.get('owner', '')}",
                 f"- Timeline: {item.get('timeline', '')}",
+                f"- Success Metric: {item.get('success_metric', '')}",
                 "",
                 f"**Business Impact:** {item.get('business_impact', '')}",
                 "",

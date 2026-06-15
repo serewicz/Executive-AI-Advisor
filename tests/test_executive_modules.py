@@ -210,6 +210,8 @@ def test_ai_governance_assessment_endpoint_returns_executive_controls(monkeypatc
     assert response.status_code == 200
     body = response.json()
     assert body["executive_summary"]
+    assert body["overall_maturity"] in {"low", "medium", "high"}
+    assert body["risk_rating"] in {"red", "yellow", "green"}
     assert len(body["items"]) == 9
     categories = {item["category"] for item in body["items"]}
     assert "ai_use_case_clarity" in categories
@@ -221,6 +223,7 @@ def test_ai_governance_assessment_endpoint_returns_executive_controls(monkeypatc
         assert item["recommended_next_step"]
         assert item["owner"]
         assert item["timeline"]
+        assert item["success_metric"]
 
 
 def make_hundred_day_plan(document_set_id):
