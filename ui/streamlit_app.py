@@ -79,6 +79,10 @@ LOCAL_UI_STATE_KEYS = [
     "technology_report",
     "cra_readiness_report",
     "hundred_day_plan",
+    "executive_risk_scorecard",
+    "executive_board_brief",
+    "executive_hundred_day_plan",
+    "ai_governance_assessment",
     "evaluation_response",
     "evaluation_questions_text",
     "evaluation_questions_initialized",
@@ -116,6 +120,8 @@ def main() -> None:
         _render_board_summary_section()
 
     st.divider()
+    _render_executive_modules_section()
+    st.divider()
     _render_technology_report_section()
     st.divider()
     _render_cra_readiness_section()
@@ -145,6 +151,10 @@ def _initialize_state() -> None:
         "technology_report": None,
         "cra_readiness_report": None,
         "hundred_day_plan": None,
+        "executive_risk_scorecard": None,
+        "executive_board_brief": None,
+        "executive_hundred_day_plan": None,
+        "ai_governance_assessment": None,
         "evaluation_response": None,
         "evaluation_questions_text": "",
         "evaluation_questions_initialized": False,
@@ -670,6 +680,187 @@ def _render_board_memo(response: dict[str, Any]) -> None:
     _render_list("Recommended Actions", memo.get("recommended_actions", []))
     _render_limitations(memo.get("limitations", []))
     _render_citations(response.get("citations", []), title="Board Summary Citations")
+
+
+def _render_executive_modules_section() -> None:
+    st.header("Executive Modules")
+    st.markdown(
+        '<div class="section-note">Board-facing outputs that translate technical findings into business impact, ownership, timelines, and measurable actions.</div>',
+        unsafe_allow_html=True,
+    )
+
+    document_set_id = st.session_state.active_document_set_id
+    if document_set_id:
+        st.caption(f"Scoped to active investigation: {st.session_state.active_document_set_name}")
+    else:
+        st.info("Select or create an investigation before generating executive modules.")
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        top_k = st.slider("Executive evidence budget", min_value=5, max_value=40, value=20, key="executive_modules_top_k")
+    with col2:
+        plan_type = st.selectbox(
+            "100-day plan scenario",
+            ["growth_equity", "acquisition_integration", "turnaround"],
+            key="executive_modules_plan_type",
+        )
+
+    buttons = st.columns(4)
+    disabled = not document_set_id
+    payload_base = {"document_set_id": document_set_id, "top_k": top_k, **_generation_provider_payload()}
+
+    with buttons[0]:
+        if st.button("Risk Scorecard", disabled=disabled, use_container_width=True):
+            response = _post_json("/executive/risk-scorecard", payload_base)
+            if response:
+                st.session_state.executive_risk_scorecard = _with_report_metadata(response, "technology_risk_scorecard")
+    with buttons[1]:
+        if st.button("Board Brief", disabled=disabled, use_container_width=True):
+            response = _post_json("/executive/board-brief", payload_base)
+            if response:
+                st.session_state.executive_board_brief = _with_report_metadata(response, "board_brief")
+    with buttons[2]:
+        if st.button("100-Day Plan", disabled=disabled, use_container_width=True):
+            response = _post_json("/executive/100-day-plan", {**payload_base, "plan_type": plan_type})
+            if response:
+                st.session_state.executive_hundred_day_plan = _with_report_metadata(
+                    response,
+                    "100_day_plan",
+                    plan_type,
+                )
+    with buttons[3]:
+        if st.button("AI Governance", disabled=disabled, use_container_width=True):
+            response = _post_json("/executive/ai-governance-assessment", payload_base)
+            if response:
+                st.session_state.ai_governance_assessment = _with_report_metadata(response, "ai_governance_assessment")
+
+    tabs = st.tabs(["Risk Scorecard", "Board Brief", "100-Day Plan", "AI Governance"])
+    with tabs[0]:
+        if st.session_state.executive_risk_scorecard:
+            _render_executive_risk_scorecard(st.session_state.executive_risk_scorecard)
+        else:
+            st.info("Generate the Technology Risk Scorecard first. Other executive outputs can reuse its risk structure.")
+    with tabs[1]:
+        if st.session_state.executive_board_brief:
+            _render_executive_board_brief(st.session_state.executive_board_brief)
+        else:
+            st.info("Generate a board brief after the investigation has processed documents.")
+    with tabs[2]:
+        if st.session_state.executive_hundred_day_plan:
+            _render_hundred_day_plan(st.session_state.executive_hundred_day_plan)
+        else:
+            st.info("Generate a 100-day plan for the selected scenario.")
+    with tabs[3]:
+        if st.session_state.ai_governance_assessment:
+            _render_ai_governance_assessment(st.session_state.ai_governance_assessment)
+        else:
+            st.info("Generate an AI governance assessment for executive review.")
+
+
+def _render_executive_risk_scorecard(scorecard: dict[str, Any]) -> None:
+    st.subheader("Technology Risk Scorecard")
+    _render_report_metadata(scorecard)
+    rows = scorecard.get("scorecard", [])
+    st.dataframe(
+        [
+            {
+                "Category": _format_summary_type(row.get("category", "")),
+                "Status": str(row.get("status", "")).title(),
+                "Owner": row.get("recommended_owner", ""),
+                "Timeline": row.get("recommended_timeline", ""),
+                "Success Metric": row.get("success_metric", ""),
+            }
+            for row in rows
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+    for row in rows:
+        with st.expander(_format_summary_type(row.get("category", ""))):
+            st.markdown(render_risk_badge(str(row.get("status", "yellow"))), unsafe_allow_html=True)
+            st.markdown(f"**Explanation:** {row.get('explanation', '')}")
+            st.markdown(f"**Business Impact:** {row.get('business_impact', '')}")
+            st.markdown(f"**Owner:** {row.get('recommended_owner', '')}")
+            st.markdown(f"**Timeline:** {row.get('recommended_timeline', '')}")
+            st.markdown(f"**Success Metric:** {row.get('success_metric', '')}")
+            _render_citations(row.get("evidence", []), title="Evidence", use_expanders=False)
+    markdown = _build_executive_risk_scorecard_markdown(scorecard)
+    st.download_button(
+        label="Download Technology Risk Scorecard.md",
+        data=markdown,
+        file_name=_export_filename(scorecard, "technology_risk_scorecard"),
+        mime="text/markdown",
+        key=f"{_download_key(scorecard, 'technology_risk_scorecard')}_inline",
+        use_container_width=True,
+    )
+
+
+def _render_executive_board_brief(brief: dict[str, Any]) -> None:
+    st.subheader("Board Brief")
+    _render_report_metadata(brief)
+    _render_confidence(brief.get("confidence", "low"))
+    st.markdown("#### Executive Summary")
+    st.markdown(normalize_text_field(brief.get("executive_summary", "")))
+    for risk in brief.get("top_5_technology_risks", []):
+        with st.expander(risk.get("risk", "Technology risk")):
+            st.markdown(f"**Business Impact:** {risk.get('business_impact', '')}")
+            st.markdown(f"**Recommended Action:** {risk.get('recommended_action', '')}")
+            _render_citations(risk.get("evidence", []), title="Evidence", use_expanders=False)
+    _render_list("Recommended Board-Level Actions", brief.get("recommended_board_level_actions", []))
+    _render_list("Key Decisions Needed", brief.get("key_decisions_needed", []))
+    _render_list("Questions the Board Should Ask Management", brief.get("questions_for_management", []))
+    _render_limitations(brief.get("limitations", []))
+    _render_citations(brief.get("citations", []), title="Board Brief Citations")
+    markdown = _build_executive_board_brief_markdown(brief)
+    st.download_button(
+        label="Download Board Brief.md",
+        data=markdown,
+        file_name=_export_filename(brief, "board_brief"),
+        mime="text/markdown",
+        key=f"{_download_key(brief, 'board_brief')}_inline",
+        use_container_width=True,
+    )
+
+
+def _render_ai_governance_assessment(report: dict[str, Any]) -> None:
+    st.subheader("AI Governance Assessment")
+    _render_report_metadata(report)
+    _render_confidence(report.get("confidence", "low"))
+    st.markdown("#### Executive Summary")
+    st.markdown(normalize_text_field(report.get("executive_summary", "")))
+    st.dataframe(
+        [
+            {
+                "Category": _format_summary_type(item.get("category", "")),
+                "Maturity": str(item.get("maturity_level", "")).title(),
+                "Risk": str(item.get("risk_level", "")).title(),
+                "Owner": item.get("owner", ""),
+                "Timeline": item.get("timeline", ""),
+            }
+            for item in report.get("items", [])
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+    for item in report.get("items", []):
+        with st.expander(_format_summary_type(item.get("category", ""))):
+            st.markdown(render_risk_badge(str(item.get("risk_level", "yellow"))), unsafe_allow_html=True)
+            st.markdown(f"**Maturity:** {str(item.get('maturity_level', '')).title()}")
+            st.markdown(f"**Business Impact:** {item.get('business_impact', '')}")
+            st.markdown(f"**Next Step:** {item.get('recommended_next_step', '')}")
+            st.markdown(f"**Owner:** {item.get('owner', '')}")
+            st.markdown(f"**Timeline:** {item.get('timeline', '')}")
+            _render_citations(item.get("evidence", []), title="Evidence", use_expanders=False)
+    _render_limitations(report.get("limitations", []))
+    markdown = _build_ai_governance_assessment_markdown(report)
+    st.download_button(
+        label="Download AI Governance Assessment.md",
+        data=markdown,
+        file_name=_export_filename(report, "ai_governance_assessment"),
+        mime="text/markdown",
+        key=f"{_download_key(report, 'ai_governance_assessment')}_inline",
+        use_container_width=True,
+    )
 
 
 def _render_technology_report_section() -> None:
@@ -1290,10 +1481,77 @@ def _render_export_section() -> None:
     technology_report = st.session_state.technology_report
     cra_readiness_report = st.session_state.cra_readiness_report
     hundred_day_plan = st.session_state.hundred_day_plan
+    executive_risk_scorecard = st.session_state.executive_risk_scorecard
+    executive_board_brief = st.session_state.executive_board_brief
+    executive_hundred_day_plan = st.session_state.executive_hundred_day_plan
+    ai_governance_assessment = st.session_state.ai_governance_assessment
 
-    if not board_summary and not technology_report and not cra_readiness_report and not hundred_day_plan:
-        st.info("Generate a board summary, technology due diligence report, CRA readiness assessment, or 100-day plan before exporting.")
+    if not any(
+        [
+            board_summary,
+            technology_report,
+            cra_readiness_report,
+            hundred_day_plan,
+            executive_risk_scorecard,
+            executive_board_brief,
+            executive_hundred_day_plan,
+            ai_governance_assessment,
+        ]
+    ):
+        st.info("Generate an executive output before exporting.")
         return
+
+    if executive_risk_scorecard:
+        scorecard_markdown = _build_executive_risk_scorecard_markdown(executive_risk_scorecard)
+        st.download_button(
+            label="Download Technology Risk Scorecard.md",
+            data=scorecard_markdown,
+            file_name=_export_filename(executive_risk_scorecard, "technology_risk_scorecard"),
+            mime="text/markdown",
+            key=_download_key(executive_risk_scorecard, "technology_risk_scorecard"),
+            use_container_width=True,
+        )
+
+    if executive_board_brief:
+        brief_markdown = _build_executive_board_brief_markdown(executive_board_brief)
+        st.download_button(
+            label="Download Board Brief.md",
+            data=brief_markdown,
+            file_name=_export_filename(executive_board_brief, "board_brief"),
+            mime="text/markdown",
+            key=_download_key(executive_board_brief, "board_brief"),
+            use_container_width=True,
+        )
+
+    if executive_hundred_day_plan:
+        executive_plan_markdown = _build_hundred_day_plan_markdown(executive_hundred_day_plan)
+        st.download_button(
+            label="Download Executive 100-Day Technology Plan.md",
+            data=executive_plan_markdown,
+            file_name=_export_filename(
+                executive_hundred_day_plan,
+                "executive_100_day_plan",
+                str(executive_hundred_day_plan.get("plan_type", "plan")),
+            ),
+            mime="text/markdown",
+            key=_download_key(
+                executive_hundred_day_plan,
+                "executive_100_day_plan",
+                str(executive_hundred_day_plan.get("plan_type", "plan")),
+            ),
+            use_container_width=True,
+        )
+
+    if ai_governance_assessment:
+        ai_markdown = _build_ai_governance_assessment_markdown(ai_governance_assessment)
+        st.download_button(
+            label="Download AI Governance Assessment.md",
+            data=ai_markdown,
+            file_name=_export_filename(ai_governance_assessment, "ai_governance_assessment"),
+            mime="text/markdown",
+            key=_download_key(ai_governance_assessment, "ai_governance_assessment"),
+            use_container_width=True,
+        )
 
     if board_summary:
         markdown = _build_markdown_memo(board_summary)
@@ -2084,6 +2342,142 @@ def _download_key(payload: dict[str, Any], report_type: str, variant: str | None
         ]
     )
     return _sanitize_filename_part(raw).lower()
+
+
+def _build_executive_risk_scorecard_markdown(scorecard: dict[str, Any]) -> str:
+    lines = [
+        "# Technology Risk Scorecard",
+        "",
+        *_metadata_lines(scorecard, "technology_risk_scorecard"),
+        f"Investigation ID: `{scorecard.get('document_set_id', '')}`",
+        "",
+        "| Category | Status | Business Impact | Owner | Timeline | Success Metric |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for item in scorecard.get("scorecard", []):
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _format_summary_type(item.get("category", "")),
+                    str(item.get("status", "")).title(),
+                    str(item.get("business_impact", "")).replace("|", "\\|"),
+                    str(item.get("recommended_owner", "")).replace("|", "\\|"),
+                    str(item.get("recommended_timeline", "")).replace("|", "\\|"),
+                    str(item.get("success_metric", "")).replace("|", "\\|"),
+                ]
+            )
+            + " |"
+        )
+    lines.extend([""])
+    for item in scorecard.get("scorecard", []):
+        lines.extend(
+            [
+                f"## {_format_summary_type(item.get('category', ''))}",
+                f"- Status: {str(item.get('status', '')).title()}",
+                f"- Owner: {item.get('recommended_owner', '')}",
+                f"- Timeline: {item.get('recommended_timeline', '')}",
+                f"- Success Metric: {item.get('success_metric', '')}",
+                "",
+                f"**Explanation:** {item.get('explanation', '')}",
+                "",
+                f"**Business Impact:** {item.get('business_impact', '')}",
+                "",
+                "### Evidence",
+                "",
+            ]
+        )
+        lines.extend(_markdown_citations(item.get("evidence", []), heading_level="####"))
+    lines.extend(_markdown_list("Limitations", scorecard.get("limitations", [])))
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_executive_board_brief_markdown(brief: dict[str, Any]) -> str:
+    lines = [
+        "# Board Brief",
+        "",
+        *_metadata_lines(brief, "board_brief"),
+        f"Investigation ID: `{brief.get('document_set_id', '')}`",
+        f"Confidence: **{str(brief.get('confidence', '')).title()}**",
+        "",
+        "## Executive Summary",
+        normalize_text_field(brief.get("executive_summary", "")),
+        "",
+        "## Top 5 Technology Risks",
+        "",
+    ]
+    for index, risk in enumerate(brief.get("top_5_technology_risks", []), start=1):
+        lines.extend(
+            [
+                f"### {index}. {risk.get('risk', '')}",
+                f"**Business Impact:** {risk.get('business_impact', '')}",
+                "",
+                f"**Recommended Action:** {risk.get('recommended_action', '')}",
+                "",
+                "#### Evidence",
+                "",
+            ]
+        )
+        lines.extend(_markdown_citations(risk.get("evidence", []), heading_level="#####"))
+    lines.extend(_markdown_list("Recommended Board-Level Actions", brief.get("recommended_board_level_actions", [])))
+    lines.extend(_markdown_list("Key Decisions Needed", brief.get("key_decisions_needed", [])))
+    lines.extend(_markdown_list("Questions the Board Should Ask Management", brief.get("questions_for_management", [])))
+    lines.extend(_markdown_list("Limitations", brief.get("limitations", [])))
+    lines.extend(["## Citations", ""])
+    lines.extend(_markdown_citations(brief.get("citations", []), heading_level="###"))
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_ai_governance_assessment_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# AI Governance Assessment",
+        "",
+        *_metadata_lines(report, "ai_governance_assessment"),
+        f"Investigation ID: `{report.get('document_set_id', '')}`",
+        f"Confidence: **{str(report.get('confidence', '')).title()}**",
+        "",
+        "## Executive Summary",
+        normalize_text_field(report.get("executive_summary", "")),
+        "",
+        "| Category | Maturity | Risk | Owner | Timeline | Next Step |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for item in report.get("items", []):
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _format_summary_type(item.get("category", "")),
+                    str(item.get("maturity_level", "")).title(),
+                    str(item.get("risk_level", "")).title(),
+                    str(item.get("owner", "")).replace("|", "\\|"),
+                    str(item.get("timeline", "")).replace("|", "\\|"),
+                    str(item.get("recommended_next_step", "")).replace("|", "\\|"),
+                ]
+            )
+            + " |"
+        )
+    lines.extend([""])
+    for item in report.get("items", []):
+        lines.extend(
+            [
+                f"## {_format_summary_type(item.get('category', ''))}",
+                f"- Maturity Level: {str(item.get('maturity_level', '')).title()}",
+                f"- Risk Level: {str(item.get('risk_level', '')).title()}",
+                f"- Owner: {item.get('owner', '')}",
+                f"- Timeline: {item.get('timeline', '')}",
+                "",
+                f"**Business Impact:** {item.get('business_impact', '')}",
+                "",
+                f"**Recommended Next Step:** {item.get('recommended_next_step', '')}",
+                "",
+                "### Evidence",
+                "",
+            ]
+        )
+        lines.extend(_markdown_citations(item.get("evidence", []), heading_level="####"))
+    lines.extend(_markdown_list("Limitations", report.get("limitations", [])))
+    return "\n".join(lines).strip() + "\n"
 
 
 def _build_markdown_memo(response: dict[str, Any]) -> str:

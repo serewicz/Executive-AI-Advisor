@@ -137,12 +137,35 @@ Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:
 5. Embed chunks with a local or optional OpenAI provider.
 6. Search with pgvector inside the selected investigation by default.
 7. Generate cited Q&A or board memos.
-8. Run technology due diligence assessments.
-9. Generate technology due diligence reports with risk ratings, confidence levels, risk heatmaps, and 30/60/90-day actions.
-10. Generate scenario-specific 100-day technology operating plans with an executive one-pager, timeline summary, risk heatmap, deliverables, board checkpoints, and Markdown export.
-11. Evaluate output quality and store evaluation runs.
+8. Run executive modules for risk scorecards, board briefs, 100-day plans, and AI governance assessment.
+9. Run technology due diligence assessments.
+10. Generate technology due diligence reports with risk ratings, confidence levels, risk heatmaps, and 30/60/90-day actions.
+11. Generate scenario-specific 100-day technology operating plans with an executive one-pager, timeline summary, risk heatmap, deliverables, board checkpoints, and Markdown export.
+12. Evaluate output quality and store evaluation runs.
 
 See [Architecture](docs/Architecture.md) for the full system design.
+
+## Executive Modules
+
+The Streamlit UI includes an **Executive Modules** section for board, CEO, PE operating partner, and fractional CTO workflows. These outputs reuse the existing ingestion, retrieval, citation, diligence, and planning pipeline instead of duplicating RAG logic.
+
+Available modules:
+
+- **Technology Risk Scorecard**: red/yellow/green assessment across architecture, security, AI governance, data handling, cloud/infrastructure, delivery predictability, key-person risk, technical debt, and compliance readiness. Each row includes business impact, owner, timeline, success metric, and evidence where available.
+- **Board Brief Generator**: concise board-ready summary with top technology risks, business impact, recommended board-level actions, decisions needed, management questions, confidence, limitations, and citations.
+- **100-Day Technology Plan**: scenario-specific operating plan for growth equity, acquisition integration, or turnaround contexts. Outputs include owners, outcomes, success metrics, risks reduced, and board/CEO visibility points.
+- **AI Governance Assessment**: executive review of use case clarity, business alignment, data privacy/security, model evaluation, human review, cost management, auditability, vendor/model dependency, and policy readiness.
+
+API endpoints:
+
+```text
+POST /executive/risk-scorecard
+POST /executive/board-brief
+POST /executive/100-day-plan
+POST /executive/ai-governance-assessment
+```
+
+Each endpoint accepts `document_set_id`, uses the active investigation workspace as scope, and supports Markdown download from Streamlit.
 
 ## Executive Planning Outputs
 
@@ -183,6 +206,7 @@ Implemented:
 - PDF upload, parsing, chunking, embeddings, search
 - cited Q&A
 - board summary generation
+- executive risk scorecard, board brief, 100-day plan, and AI governance modules
 - technology due diligence report and 100-day plan generation
 - CRA readiness assessment
 - executive one-pager, timeline summary, and risk heatmap outputs for technology planning
