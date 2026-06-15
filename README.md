@@ -2,6 +2,42 @@
 
 Executive AI Advisor is AI-powered executive decision support for technology diligence, board briefs, risk scorecards, AI governance, and 100-day technology plans.
 
+# Executive Deliverables
+
+Executive AI Advisor turns uploaded company documents into four board-ready outputs:
+
+```mermaid
+flowchart TD
+  A["Company documents<br/>diligence reports, assessments, board materials"] --> B["Executive AI Advisor<br/>evidence retrieval, citations, governance workflow"]
+  B --> C["Technology Risk Scorecard<br/>red/yellow/green risk, owners, timelines"]
+  B --> D["Board Brief<br/>risks, decisions, management questions"]
+  B --> E["100-Day Technology Plan<br/>growth, integration, turnaround"]
+  B --> F["AI Governance Assessment<br/>maturity, controls, auditability"]
+```
+
+## Technology Risk Scorecard
+
+Executive technology risk assessment using red/yellow/green ratings, business impact, ownership, timelines, confidence levels, and success metrics.
+
+## Board Brief Generator
+
+Board-ready executive summaries including key risks, business impact, recommended decisions, management questions, confidence levels, and citations.
+
+## 100-Day Technology Plan
+
+Structured plans for growth, transformation, acquisition integration, and technology turnaround scenarios.
+
+## AI Governance Assessment
+
+Executive assessment of AI maturity, governance, privacy, security, auditability, vendor risk, and policy readiness.
+
+# Example Executive Outputs
+
+- [Technology Risk Scorecard](examples/technology_risk_scorecard.md)
+- [Board Brief](examples/board_brief.md)
+- [100-Day Technology Plan](examples/100_day_technology_plan.md)
+- [AI Governance Assessment](examples/ai_governance_assessment.md)
+
 ## Who It Is For
 
 - CTOs and technology executives
@@ -12,37 +48,23 @@ Executive AI Advisor is AI-powered executive decision support for technology dil
 
 ## What It Demonstrates
 
-- Secure document ingestion
-- Diligence workspaces for company/deal isolation
-- PDF parsing and page-aware text extraction
-- Document chunking and lifecycle tracking
-- Low-value chunk filtering for table-of-contents and other weak evidence
-- Local and optional external embeddings
-- PostgreSQL and pgvector semantic search
-- Document-scoped cited executive Q&A
-- Board-level summary generation
-- Concise relevant citation excerpts with optional full source text
-- Streamlit executive demo UI
-- Deterministic evaluation workflows
-- AI governance, citation, and auditability patterns
+- Executive decision support for technology diligence and value creation
+- Board-level translation of technical findings into business impact
+- Investigation workspaces that isolate each company, deal, or portfolio review
+- Cited outputs with confidence levels, limitations, owners, timelines, and measurable actions
+- AI governance, technology risk, board communication, and post-close planning workflows
+- Local executive demo UI with Markdown exports and no raw JSON
 
 ## Current Capabilities
 
 - Generate Technology Risk Scorecards with red/yellow/green ratings, confidence levels, business impact, owners, timelines, and success metrics
 - Generate Board Briefs with executive summaries, top risks, management questions, recommended decisions, citations, confidence, and limitations
 - Generate 100-Day Technology Plans for growth equity, acquisition integration, and turnaround scenarios
-- Generate AI Governance Assessments covering AI use-case clarity, data handling, model/output evaluation, human oversight, cost controls, auditability, and policy readiness
+- Generate AI Governance Assessments covering AI use-case clarity, data governance, security and privacy, model/output evaluation, human oversight, cost controls, auditability, vendor risk, and policy readiness
 - Upload PDFs with source type and classification metadata
 - Create diligence workspaces and upload multiple PDFs per investigation
-- Parse PDFs into page-level records
-- Chunk documents into retrieval-ready passages
-- Generate embeddings with local providers by default
-- Search embedded chunks with pgvector
 - Ask cited executive questions scoped to the active investigation by default
-- Scope Q&A and board summaries to the active investigation by default
-- Run technology due diligence assessments
 - Generate technology due diligence reports for active investigations
-- Generate scenario-specific 100-day technology operating plans from diligence findings
 - Review 100-day plan executive one-pagers, timeline summaries, risk heatmaps, deliverables, owners, and board checkpoints
 - Generate board summaries with citations, confidence, and limitations
 - Render workflows in Streamlit without raw JSON
@@ -99,13 +121,6 @@ Open:
 - [Governance](docs/Governance.md)
 - [Security](docs/Security.md)
 
-## Example Outputs
-
-- [Example Technology Risk Scorecard](docs/examples/example_technology_risk_scorecard.md)
-- [Example Board Brief](docs/examples/example_board_brief.md)
-- [Example 100-Day Technology Plan](docs/examples/example_100_day_technology_plan.md)
-- [Example AI Governance Assessment](docs/examples/example_ai_governance_assessment.md)
-
 ## Demo Datasets
 
 Synthetic diligence datasets are available for local demos and testing:
@@ -116,20 +131,14 @@ Synthetic diligence datasets are available for local demos and testing:
 
 ## Architecture Overview
 
-Executive AI Advisor separates ingestion, retrieval, generation, and evaluation:
+Executive AI Advisor separates company evidence, executive outputs, and evaluation so the same source documents can support multiple board-ready workflows:
 
-1. Upload and classify a PDF.
-2. Add it to a diligence workspace.
-3. Parse it into page-aware text.
-4. Chunk text into retrieval passages.
-5. Embed chunks with a local or optional OpenAI provider.
-6. Search with pgvector inside the selected investigation by default.
-7. Generate cited Q&A or board memos.
-8. Run executive modules for risk scorecards, board briefs, 100-day plans, and AI governance assessment.
-9. Run technology due diligence assessments.
-10. Generate technology due diligence reports with risk ratings, confidence levels, risk heatmaps, and 30/60/90-day actions.
-11. Generate scenario-specific 100-day technology operating plans with an executive one-pager, timeline summary, risk heatmap, deliverables, board checkpoints, and Markdown export.
-12. Evaluate output quality and store evaluation runs.
+1. Create or select a diligence workspace for a company or deal.
+2. Upload and classify source documents.
+3. Process documents into cited evidence.
+4. Generate executive-ready scorecards, briefs, plans, and AI governance assessments.
+5. Export Markdown outputs for board packets, operating reviews, and diligence discussions.
+6. Evaluate output quality and store evaluation runs.
 
 See [Architecture](docs/Architecture.md) for the full system design.
 
@@ -142,7 +151,7 @@ Available modules:
 - **Technology Risk Scorecard**: red/yellow/green assessment across architecture, security, AI governance, data handling, cloud/infrastructure, delivery predictability, key-person risk, technical debt, and compliance readiness. Each row includes business impact, owner, timeline, success metric, and evidence where available.
 - **Board Brief Generator**: concise board-ready summary with top technology risks, business impact, recommended board-level actions, decisions needed, management questions, confidence, limitations, and citations.
 - **100-Day Technology Plan**: scenario-specific operating plan for growth equity, acquisition integration, or turnaround contexts. Outputs include owners, outcomes, success metrics, risks reduced, and board/CEO visibility points.
-- **AI Governance Assessment**: executive review of use case clarity, business alignment, data privacy/security, model evaluation, human review, cost management, auditability, vendor/model dependency, and policy readiness.
+- **AI Governance Assessment**: executive review of use case clarity, business alignment, data governance, security/privacy, model evaluation, human review, cost management, auditability, vendor/model dependency, and policy readiness.
 
 API endpoints:
 

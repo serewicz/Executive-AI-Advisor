@@ -77,7 +77,8 @@ SCORECARD_CATEGORIES = {
 AI_GOVERNANCE_CATEGORIES = {
     "ai_use_case_clarity": ("AI use cases lack clear approval criteria or business ownership.", "CTO"),
     "business_outcome_alignment": ("AI initiatives may not be tied to measurable business outcomes.", "CEO"),
-    "data_privacy_security": ("AI adoption may expose sensitive data without clear controls.", "CISO"),
+    "data_governance": ("AI use depends on trusted, classified, and governed data sources.", "CTO"),
+    "data_privacy_security": ("AI adoption may expose sensitive data without clear security and privacy controls.", "CISO"),
     "model_output_evaluation": ("Model outputs need quality, safety, and accuracy evaluation before operational reliance.", "CTO"),
     "human_in_the_loop_controls": ("High-impact AI workflows need explicit human review and escalation paths.", "Product"),
     "cost_management": ("AI usage needs spend tracking, limits, and ownership before broad rollout.", "CFO"),
@@ -90,6 +91,7 @@ AI_GOVERNANCE_CATEGORIES = {
 AI_GOVERNANCE_SUCCESS_METRICS = {
     "ai_use_case_clarity": "Approved AI use case inventory includes business owner, intended outcome, risk tier, and review date.",
     "business_outcome_alignment": "Each approved AI initiative has a measurable business outcome and executive sponsor.",
+    "data_governance": "AI data sources have documented ownership, classification, quality expectations, and permitted use.",
     "data_privacy_security": "AI workflows have documented data classifications, access controls, and prohibited data handling rules.",
     "model_output_evaluation": "Model outputs are evaluated against documented quality, safety, and accuracy criteria before rollout.",
     "human_in_the_loop_controls": "High-impact AI workflows include named human reviewers, escalation paths, and exception handling.",

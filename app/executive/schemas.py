@@ -85,6 +85,7 @@ class AIGovernanceAssessmentItem(BaseModel):
     category: Literal[
         "ai_use_case_clarity",
         "business_outcome_alignment",
+        "data_governance",
         "data_privacy_security",
         "model_output_evaluation",
         "human_in_the_loop_controls",

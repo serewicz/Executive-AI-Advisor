@@ -141,7 +141,7 @@ Use the modules after documents have been uploaded, processed, and embedded:
 - Technology Risk Scorecard: red/yellow/green scoring across architecture, security, AI governance, data handling, cloud/infrastructure, delivery predictability, key-person risk, technical debt, and compliance readiness.
 - Board Brief Generator: concise board-ready executive summary, top risks, business impact, decisions needed, management questions, confidence, limitations, and citations.
 - 100-Day Technology Plan: scenario-specific plan for growth equity, acquisition integration, or turnaround workflows.
-- AI Governance Assessment: executive review of AI use-case clarity, business alignment, data privacy and security, model/output evaluation, human review, cost controls, auditability, vendor/model dependency, and policy readiness.
+- AI Governance Assessment: executive review of AI use-case clarity, business alignment, data governance, security and privacy, model/output evaluation, human review, cost controls, auditability, vendor/model dependency, and policy readiness.
 
 Each output is designed to answer:
 

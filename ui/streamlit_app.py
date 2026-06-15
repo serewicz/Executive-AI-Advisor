@@ -798,7 +798,7 @@ def _render_executive_risk_scorecard(scorecard: dict[str, Any]) -> None:
 
 
 def _render_executive_board_brief(brief: dict[str, Any]) -> None:
-    st.subheader("Board Brief")
+    st.subheader("Board Brief Generator")
     _render_report_metadata(brief)
     _render_confidence(brief.get("confidence", "low"))
     st.markdown("#### Executive Summary")
@@ -828,7 +828,7 @@ def _render_ai_governance_assessment(report: dict[str, Any]) -> None:
     st.subheader("AI Governance Assessment")
     _render_report_metadata(report)
     col1, col2, col3 = st.columns(3)
-    col1.metric("Overall Maturity", str(report.get("overall_maturity", "medium")).title())
+    col1.metric("Maturity Rating", str(report.get("overall_maturity", "medium")).title())
     col2.markdown(render_risk_badge(str(report.get("risk_rating", "yellow"))), unsafe_allow_html=True)
     with col3:
         _render_confidence(report.get("confidence", "low"))
@@ -2302,7 +2302,7 @@ def _build_ai_governance_assessment_markdown(report: dict[str, Any]) -> str:
         "",
         *_metadata_lines(report, "ai_governance_assessment"),
         f"Investigation ID: `{report.get('document_set_id', '')}`",
-        f"Overall AI Governance Maturity: **{str(report.get('overall_maturity', '')).title()}**",
+        f"Maturity Rating: **{str(report.get('overall_maturity', '')).title()}**",
         f"Risk Rating: **{str(report.get('risk_rating', '')).title()}**",
         f"Confidence: **{str(report.get('confidence', '')).title()}**",
         "",
