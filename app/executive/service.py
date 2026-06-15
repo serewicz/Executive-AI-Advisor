@@ -77,13 +77,28 @@ SCORECARD_CATEGORIES = {
 AI_GOVERNANCE_CATEGORIES = {
     "ai_use_case_clarity": ("AI use cases lack clear approval criteria or business ownership.", "CTO"),
     "business_outcome_alignment": ("AI initiatives may not be tied to measurable business outcomes.", "CEO"),
-    "data_privacy_security": ("AI adoption may expose sensitive data without clear controls.", "CISO"),
+    "data_governance": ("AI use depends on trusted, classified, and governed data sources.", "CTO"),
+    "data_privacy_security": ("AI adoption may expose sensitive data without clear security and privacy controls.", "CISO"),
     "model_output_evaluation": ("Model outputs need quality, safety, and accuracy evaluation before operational reliance.", "CTO"),
     "human_in_the_loop_controls": ("High-impact AI workflows need explicit human review and escalation paths.", "Product"),
     "cost_management": ("AI usage needs spend tracking, limits, and ownership before broad rollout.", "CFO"),
     "auditability": ("AI decisions and outputs need traceability for governance and management review.", "CISO"),
     "vendor_model_dependency": ("Model or vendor concentration can create continuity, cost, or data residency risk.", "CTO"),
     "compliance_policy_readiness": ("AI policy readiness should be validated against privacy, security, and sector obligations.", "Board"),
+}
+
+
+AI_GOVERNANCE_SUCCESS_METRICS = {
+    "ai_use_case_clarity": "Approved AI use case inventory includes business owner, intended outcome, risk tier, and review date.",
+    "business_outcome_alignment": "Each approved AI initiative has a measurable business outcome and executive sponsor.",
+    "data_governance": "AI data sources have documented ownership, classification, quality expectations, and permitted use.",
+    "data_privacy_security": "AI workflows have documented data classifications, access controls, and prohibited data handling rules.",
+    "model_output_evaluation": "Model outputs are evaluated against documented quality, safety, and accuracy criteria before rollout.",
+    "human_in_the_loop_controls": "High-impact AI workflows include named human reviewers, escalation paths, and exception handling.",
+    "cost_management": "AI usage has budget owner, spend dashboard, and threshold alerts reviewed monthly.",
+    "auditability": "AI prompts, outputs, decisions, approvals, and exceptions are traceable for management review.",
+    "vendor_model_dependency": "Critical AI vendors and models have documented risk review, fallback options, and renewal ownership.",
+    "compliance_policy_readiness": "AI policies map to privacy, security, sector, and board governance obligations with evidence artifacts.",
 }
 
 
@@ -195,6 +210,8 @@ def generate_ai_governance_assessment(
 
     return AIGovernanceAssessmentResponse(
         document_set_id=document_set_id,
+        overall_maturity=maturity,
+        risk_rating=status,
         executive_summary=(
             "AI governance should be treated as an executive operating discipline covering use cases, data, "
             "model evaluation, human review, cost, vendor dependency, and auditability."
@@ -209,6 +226,7 @@ def generate_ai_governance_assessment(
                 owner=owner,  # type: ignore[arg-type]
                 timeline=_timeline_for_status(status),
                 evidence=evidence,
+                success_metric=AI_GOVERNANCE_SUCCESS_METRICS[category],
             )
             for category, (issue, owner) in AI_GOVERNANCE_CATEGORIES.items()
         ],

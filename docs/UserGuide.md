@@ -106,7 +106,7 @@ The document lifecycle status changes as processing progresses:
 - `embedded`
 - `failed`
 
-Streamlit shows each document status with a progress indicator. Buttons are disabled while processing is active, failed documents show visible error messaging, and a successful full pipeline ends with: `Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan.`
+Streamlit shows an authoritative document status table for the active investigation. The table displays file name, document ID suffix, lifecycle status, readiness, and notes. Buttons are disabled while processing is active, failed documents show visible error messaging, and a successful full pipeline ends with: `Processing complete. You can now run Q&A, Board Summary, Diligence Report, or 100-Day Plan.`
 
 Use Refresh Status when another browser session, API call, or backend restart may have changed document state.
 
@@ -131,6 +131,26 @@ Outputs include:
 - source excerpts
 - page ranges
 - scope metadata
+
+## Executive Decision Modules
+
+The Streamlit UI includes a first-class Executive Decision Modules section for PE operating partners, CEOs, boards, and fractional CTO engagements. These modules reuse the active investigation workspace, retrieval, citations, diligence findings, and planning services.
+
+Use the modules after documents have been uploaded, processed, and embedded:
+
+- Technology Risk Scorecard: red/yellow/green scoring across architecture, security, AI governance, data handling, cloud/infrastructure, delivery predictability, key-person risk, technical debt, and compliance readiness.
+- Board Brief Generator: concise board-ready executive summary, top risks, business impact, decisions needed, management questions, confidence, limitations, and citations.
+- 100-Day Technology Plan: scenario-specific plan for growth equity, acquisition integration, or turnaround workflows.
+- AI Governance Assessment: executive review of AI use-case clarity, business alignment, data governance, security and privacy, model/output evaluation, human review, cost controls, auditability, vendor/model dependency, and policy readiness.
+
+Each output is designed to answer:
+
+- what is the issue?
+- why does it matter?
+- who owns it?
+- what should happen next?
+- when should it happen?
+- how will progress be measured?
 
 ## Board Summary Generator
 

@@ -85,6 +85,7 @@ class AIGovernanceAssessmentItem(BaseModel):
     category: Literal[
         "ai_use_case_clarity",
         "business_outcome_alignment",
+        "data_governance",
         "data_privacy_security",
         "model_output_evaluation",
         "human_in_the_loop_controls",
@@ -100,10 +101,13 @@ class AIGovernanceAssessmentItem(BaseModel):
     owner: RecommendedOwner
     timeline: str
     evidence: list[Citation] = []
+    success_metric: str
 
 
 class AIGovernanceAssessmentResponse(BaseModel):
     document_set_id: UUID
+    overall_maturity: MaturityLevel
+    risk_rating: RiskRating
     executive_summary: str
     items: list[AIGovernanceAssessmentItem]
     confidence: Confidence
