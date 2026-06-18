@@ -78,6 +78,7 @@ LOCAL_UI_STATE_KEYS = [
     "board_summary",
     "technology_report",
     "cra_readiness_report",
+    "ai_knowledge_governance_report",
     "hundred_day_plan",
     "executive_risk_scorecard",
     "executive_board_brief",
@@ -126,6 +127,8 @@ def main() -> None:
     st.divider()
     _render_cra_readiness_section()
     st.divider()
+    _render_ai_knowledge_governance_section()
+    st.divider()
     _render_hundred_day_plan_section()
     st.divider()
     _render_evaluation_section()
@@ -150,6 +153,7 @@ def _initialize_state() -> None:
         "board_summary": None,
         "technology_report": None,
         "cra_readiness_report": None,
+        "ai_knowledge_governance_report": None,
         "hundred_day_plan": None,
         "executive_risk_scorecard": None,
         "executive_board_brief": None,
@@ -455,6 +459,7 @@ def _render_upload_section() -> None:
         st.session_state.board_summary = None
         st.session_state.technology_report = None
         st.session_state.cra_readiness_report = None
+        st.session_state.ai_knowledge_governance_report = None
         st.session_state.hundred_day_plan = None
         st.session_state.evaluation_response = None
         if uploaded_count:
@@ -1123,6 +1128,131 @@ def _render_cra_readiness_plan(plan: dict[str, list[str]]) -> None:
         _render_list("Days 61-90", plan.get("days_61_90", []))
 
 
+def _render_ai_knowledge_governance_section() -> None:
+    st.header("AI Knowledge Governance Assessment")
+    st.markdown(
+        '<div class="section-note">Assess how enterprise knowledge should be classified, retrieved, searched, and used by AI systems.</div>',
+        unsafe_allow_html=True,
+    )
+
+    document_set_id = st.session_state.active_document_set_id
+    if document_set_id:
+        st.caption(f"Scoped to active investigation: {st.session_state.active_document_set_name}")
+    else:
+        st.info("Select or create an investigation before generating an AI Knowledge Governance Assessment.")
+
+    top_k = st.slider(
+        "AI knowledge governance evidence budget",
+        min_value=5,
+        max_value=40,
+        value=20,
+        key="ai_knowledge_governance_top_k",
+    )
+
+    if st.button(
+        "Generate AI Knowledge Governance Assessment",
+        disabled=not document_set_id,
+        use_container_width=True,
+    ):
+        with st.spinner("Retrieving evidence and generating AI knowledge governance assessment"):
+            response = _post_json(
+                "/governance/ai-knowledge",
+                {
+                    "document_set_id": document_set_id,
+                    "top_k": top_k,
+                    **_generation_provider_payload(),
+                },
+            )
+        if response:
+            st.session_state.ai_knowledge_governance_report = _with_report_metadata(
+                response,
+                "ai_knowledge_governance",
+            )
+
+    report = st.session_state.ai_knowledge_governance_report
+    if report:
+        _render_ai_knowledge_governance_report(report)
+
+
+def _render_ai_knowledge_governance_report(report: dict[str, Any]) -> None:
+    st.subheader("AI Knowledge Governance Assessment")
+    _render_report_metadata(report)
+
+    col1, col2 = st.columns(2)
+    col1.metric("Overall Readiness", str(report.get("overall_readiness", "unknown")).title())
+    col2.metric("Confidence", str(report.get("confidence", "low")).title())
+    st.markdown(
+        " ".join(
+            [
+                render_risk_badge(str(report.get("overall_readiness", "yellow"))),
+                render_confidence_badge(str(report.get("confidence", "low"))),
+            ]
+        ),
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("#### Executive Summary")
+    st.markdown(normalize_text_field(report.get("executive_summary", "No executive summary returned.")))
+    _render_list("Top Gaps", report.get("top_gaps", []))
+
+    st.markdown("#### Findings")
+    findings = report.get("findings", [])
+    if not findings:
+        st.markdown("No findings returned.")
+    for finding in findings:
+        st.markdown(f"##### {_format_summary_type(finding.get('category', 'finding'))}")
+        st.markdown(
+            " ".join(
+                [
+                    render_risk_badge(str(finding.get("readiness", "yellow"))),
+                    render_confidence_badge(str(finding.get("confidence", "low"))),
+                ]
+            ),
+            unsafe_allow_html=True,
+        )
+        st.caption(f"Recommended owner: {finding.get('recommended_owner', 'Unassigned')}")
+        st.markdown(f"**{finding.get('title', '')}**")
+        st.markdown(f"**Business impact:** {finding.get('business_impact', '')}")
+        st.markdown(f"**Evidence:** {finding.get('evidence_summary', '')}")
+        _render_list("Missing Evidence", finding.get("missing_evidence", []))
+        st.markdown(f"**Recommended action:** {finding.get('recommended_action', '')}")
+        _render_citations(
+            finding.get("citations", []),
+            title=f"{_format_summary_type(finding.get('category', 'finding'))} Evidence",
+            use_expanders=False,
+        )
+        st.divider()
+
+    _render_list("Missing Evidence", report.get("evidence_needed", []))
+    _render_list("Management Questions", report.get("management_questions", []))
+    _render_list("Board Discussion Points", report.get("board_discussion_points", []))
+    _render_list("Recommended Actions", report.get("recommended_actions", []))
+    _render_ai_knowledge_governance_plan(report.get("90_day_readiness_plan", {}))
+    _render_limitations(report.get("limitations", []))
+    _render_citations(report.get("citations", []), title="AI Knowledge Governance Citations")
+
+    markdown = _build_ai_knowledge_governance_markdown(report)
+    st.download_button(
+        label="Download AI Knowledge Governance Assessment.md",
+        data=markdown,
+        file_name=_export_filename(report, "ai_knowledge_governance"),
+        mime="text/markdown",
+        key=f"{_download_key(report, 'ai_knowledge_governance')}_inline",
+        use_container_width=True,
+    )
+
+
+def _render_ai_knowledge_governance_plan(plan: dict[str, list[str]]) -> None:
+    st.markdown("#### 90-Day AI Knowledge Governance Readiness Plan")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        _render_list("Days 1-30", plan.get("days_1_30", []))
+    with col2:
+        _render_list("Days 31-60", plan.get("days_31_60", []))
+    with col3:
+        _render_list("Days 61-90", plan.get("days_61_90", []))
+
+
 def _render_hundred_day_plan_section() -> None:
     st.header("100-Day Technology Plan")
     st.markdown(
@@ -1456,6 +1586,7 @@ def _render_evidence_section() -> None:
     board_summary = st.session_state.board_summary
     technology_report = st.session_state.technology_report
     cra_readiness_report = st.session_state.cra_readiness_report
+    ai_knowledge_governance_report = st.session_state.ai_knowledge_governance_report
     hundred_day_plan = st.session_state.hundred_day_plan
     qa_response = st.session_state.qa_response
     evaluation_response = st.session_state.evaluation_response
@@ -1464,6 +1595,7 @@ def _render_evidence_section() -> None:
         not board_summary
         and not technology_report
         and not cra_readiness_report
+        and not ai_knowledge_governance_report
         and not hundred_day_plan
         and not qa_response
         and not evaluation_response
@@ -1477,6 +1609,11 @@ def _render_evidence_section() -> None:
         _render_citations(technology_report.get("citations", []), title="Technology Diligence Evidence")
     if cra_readiness_report:
         _render_citations(cra_readiness_report.get("citations", []), title="CRA Readiness Evidence")
+    if ai_knowledge_governance_report:
+        _render_citations(
+            ai_knowledge_governance_report.get("citations", []),
+            title="AI Knowledge Governance Evidence",
+        )
     if hundred_day_plan:
         for phase in ("days_1_30", "days_31_60", "days_61_90"):
             for index, action in enumerate(hundred_day_plan.get(phase, []), start=1):
@@ -1493,6 +1630,7 @@ def _render_export_section() -> None:
     board_summary = st.session_state.board_summary
     technology_report = st.session_state.technology_report
     cra_readiness_report = st.session_state.cra_readiness_report
+    ai_knowledge_governance_report = st.session_state.ai_knowledge_governance_report
     hundred_day_plan = st.session_state.hundred_day_plan
     executive_risk_scorecard = st.session_state.executive_risk_scorecard
     executive_board_brief = st.session_state.executive_board_brief
@@ -1504,6 +1642,7 @@ def _render_export_section() -> None:
             board_summary,
             technology_report,
             cra_readiness_report,
+            ai_knowledge_governance_report,
             hundred_day_plan,
             executive_risk_scorecard,
             executive_board_brief,
@@ -1604,6 +1743,19 @@ def _render_export_section() -> None:
         )
         with st.expander("CRA readiness Markdown preview"):
             st.code(cra_markdown, language="markdown")
+
+    if ai_knowledge_governance_report:
+        ai_knowledge_markdown = _build_ai_knowledge_governance_markdown(ai_knowledge_governance_report)
+        st.download_button(
+            label="Download AI Knowledge Governance Assessment.md",
+            data=ai_knowledge_markdown,
+            file_name=_export_filename(ai_knowledge_governance_report, "ai_knowledge_governance"),
+            mime="text/markdown",
+            key=_download_key(ai_knowledge_governance_report, "ai_knowledge_governance"),
+            use_container_width=True,
+        )
+        with st.expander("AI knowledge governance Markdown preview"):
+            st.code(ai_knowledge_markdown, language="markdown")
 
     if hundred_day_plan:
         plan_markdown = _build_hundred_day_plan_markdown(hundred_day_plan)
@@ -1992,6 +2144,7 @@ def _set_active_document_set(document_set_id: str, name: str) -> None:
     st.session_state.board_summary = None
     st.session_state.technology_report = None
     st.session_state.cra_readiness_report = None
+    st.session_state.ai_knowledge_governance_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
 
@@ -2008,6 +2161,7 @@ def _clear_active_document_set() -> None:
     st.session_state.board_summary = None
     st.session_state.technology_report = None
     st.session_state.cra_readiness_report = None
+    st.session_state.ai_knowledge_governance_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
 
@@ -2016,7 +2170,15 @@ def _clear_local_ui_state() -> None:
     for key in LOCAL_UI_STATE_KEYS:
         if key in {"uploaded_documents", "selected_documents"}:
             st.session_state[key] = []
-        elif key in {"qa_response", "board_summary", "technology_report", "cra_readiness_report", "hundred_day_plan", "evaluation_response"}:
+        elif key in {
+            "qa_response",
+            "board_summary",
+            "technology_report",
+            "cra_readiness_report",
+            "ai_knowledge_governance_report",
+            "hundred_day_plan",
+            "evaluation_response",
+        }:
             st.session_state[key] = None
         elif key == "evaluation_questions_initialized":
             st.session_state[key] = False
@@ -2086,6 +2248,7 @@ def _remove_document_from_local_state(document_id: str | None) -> None:
     st.session_state.board_summary = None
     st.session_state.technology_report = None
     st.session_state.cra_readiness_report = None
+    st.session_state.ai_knowledge_governance_report = None
     st.session_state.hundred_day_plan = None
     st.session_state.evaluation_response = None
 
@@ -2625,6 +2788,65 @@ def _build_cra_readiness_markdown(report: dict[str, Any]) -> str:
         "# CRA Readiness Assessment",
         "",
         *_metadata_lines(report, "CRA Readiness Assessment"),
+        "## Executive Summary",
+        normalize_text_field(report.get("executive_summary", "")),
+        "",
+        "## Overall Readiness",
+        f"Readiness: **{str(report.get('overall_readiness', 'unknown')).title()}**",
+        f"Confidence: **{str(report.get('confidence', 'low')).title()}**",
+        "",
+    ]
+    lines.extend(_markdown_list("Top Gaps", report.get("top_gaps", [])))
+    lines.extend(["## Findings", ""])
+    for finding in report.get("findings", []):
+        lines.extend(
+            [
+                f"### {_format_summary_type(finding.get('category', 'finding'))}",
+                f"- Title: {finding.get('title', '')}",
+                f"- Readiness: {str(finding.get('readiness', '')).title()}",
+                f"- Confidence: {str(finding.get('confidence', '')).title()}",
+                f"- Recommended Owner: {finding.get('recommended_owner', '')}",
+                "",
+                f"**Business Impact:** {finding.get('business_impact', '')}",
+                "",
+                f"**Evidence Summary:** {finding.get('evidence_summary', '')}",
+                "",
+                "#### Missing Evidence",
+                "",
+            ]
+        )
+        lines.extend([f"- {item}" for item in finding.get("missing_evidence", [])] or ["None identified."])
+        lines.extend(
+            [
+                "",
+                f"**Recommended Action:** {finding.get('recommended_action', '')}",
+                "",
+                "#### Citations",
+                "",
+            ]
+        )
+        lines.extend(_markdown_citations(finding.get("citations", []), heading_level="#####"))
+
+    lines.extend(_markdown_list("Missing Evidence", report.get("evidence_needed", [])))
+    lines.extend(_markdown_list("Management Questions", report.get("management_questions", [])))
+    lines.extend(_markdown_list("Board Discussion Points", report.get("board_discussion_points", [])))
+    lines.extend(_markdown_list("Recommended Actions", report.get("recommended_actions", [])))
+    lines.extend(["## 90-Day Readiness Plan", ""])
+    plan = report.get("90_day_readiness_plan", {})
+    lines.extend(_markdown_list("Days 1-30", plan.get("days_1_30", [])))
+    lines.extend(_markdown_list("Days 31-60", plan.get("days_31_60", [])))
+    lines.extend(_markdown_list("Days 61-90", plan.get("days_61_90", [])))
+    lines.extend(_markdown_list("Limitations", report.get("limitations", [])))
+    lines.extend(["## Citations", ""])
+    lines.extend(_markdown_citations(report.get("citations", []), heading_level="###"))
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_ai_knowledge_governance_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# AI Knowledge Governance Assessment",
+        "",
+        *_metadata_lines(report, "AI Knowledge Governance Assessment"),
         "## Executive Summary",
         normalize_text_field(report.get("executive_summary", "")),
         "",
