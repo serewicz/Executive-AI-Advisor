@@ -61,6 +61,7 @@ Executive assessment of AI maturity, governance, privacy, security, auditability
 - Generate Board Briefs with executive summaries, top risks, management questions, recommended decisions, citations, confidence, and limitations
 - Generate 100-Day Technology Plans for growth equity, acquisition integration, and turnaround scenarios
 - Generate AI Governance Assessments covering AI use-case clarity, data governance, security and privacy, model/output evaluation, human oversight, cost controls, auditability, vendor risk, and policy readiness
+- Generate AI Knowledge Governance Assessments that evaluate whether an organization is governing enterprise knowledge appropriately across data classification, RAG readiness, enterprise search, sensitive IP protection, private model readiness, auditability, provider risk, and AI cost governance
 - Upload PDFs with source type and classification metadata
 - Create diligence workspaces and upload multiple PDFs per investigation
 - Ask cited executive questions scoped to the active investigation by default
@@ -122,6 +123,7 @@ Open:
 - [Demo Script](docs/DemoScript.md)
 - [Evaluation](docs/Evaluation.md)
 - [Governance](docs/Governance.md)
+- [AI Knowledge Governance Assessment](docs/AI-Knowledge-Governance-Assessment.md)
 - [Security](docs/Security.md)
 
 ## Development Workflow
@@ -131,6 +133,8 @@ Use feature branches and pull requests into `main`. See [Contributing](CONTRIBUT
 ## Methodology
 
 Executive AI Advisor automates portions of the CTO Operating System advisory methodology through document ingestion, retrieval, citations, diligence reports, board briefs, and 100-day technology plans. See [Methodology](docs/Methodology.md) for how this software platform relates to the CTO Operating System repository.
+
+Executive AI Advisor is the evidence-producing assessment layer for AI Knowledge Governance. It assesses knowledge governance, IP protection, and AI readiness based on uploaded evidence.
 
 ## Technology Leadership Portfolio
 
