@@ -1041,6 +1041,7 @@ def _render_technology_report(report: dict[str, Any]) -> None:
     _render_technology_findings(findings)
     _render_list("Management Questions", report.get("management_questions", []))
     _render_list("Board Discussion Points", report.get("board_discussion_points", []))
+    _render_diligence_ai_replicability_risk(report.get("ai_replicability_risk", {}))
     _render_list("Recommended Actions", report.get("recommended_actions", []))
     _render_technology_plan(report.get("thirty_sixty_ninety_day_plan", {}))
     _render_limitations(report.get("limitations", []))
@@ -1089,6 +1090,24 @@ def _render_technology_findings(findings: list[dict[str, Any]]) -> None:
             use_expanders=False,
         )
         st.divider()
+
+
+def _render_diligence_ai_replicability_risk(section: dict[str, Any]) -> None:
+    st.markdown("#### AI Replicability Risk")
+    if not section:
+        st.markdown("No AI replicability risk section returned.")
+        return
+
+    st.markdown(render_risk_badge(str(section.get("overall_rating", "yellow"))), unsafe_allow_html=True)
+    st.markdown("##### Executive Assessment")
+    st.markdown(normalize_text_field(section.get("executive_assessment", "")))
+    _render_list("Replicability Drivers", section.get("replicability_drivers", []))
+    _render_list("Defensibility Factors", section.get("defensibility_factors", []))
+    _render_list("Competitive Barriers", section.get("competitive_barriers", []))
+    _render_citations(section.get("evidence", []), title="Evidence", use_expanders=False)
+    _render_list("Management Questions", section.get("management_questions", []))
+    _render_list("Board Discussion Points", section.get("board_discussion_points", []))
+    _render_list("Recommendations", section.get("recommendations", []))
 
 
 def _render_technology_plan(plan: dict[str, list[str]]) -> None:
@@ -3081,6 +3100,31 @@ def _build_ai_knowledge_governance_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def _markdown_ai_replicability_risk(section: dict[str, Any]) -> list[str]:
+    if not section:
+        return ["## AI Replicability Risk", "", "No AI replicability risk section returned.", ""]
+
+    lines = [
+        "## AI Replicability Risk",
+        "",
+        "### Overall Rating",
+        f"Rating: **{str(section.get('overall_rating', 'unknown')).title()}**",
+        "",
+        "### Executive Assessment",
+        normalize_text_field(section.get("executive_assessment", "")),
+        "",
+    ]
+    lines.extend(_markdown_sublist("Replicability Drivers", section.get("replicability_drivers", []), heading_level=3))
+    lines.extend(_markdown_sublist("Defensibility Factors", section.get("defensibility_factors", []), heading_level=3))
+    lines.extend(_markdown_sublist("Competitive Barriers", section.get("competitive_barriers", []), heading_level=3))
+    lines.extend(["### Evidence", ""])
+    lines.extend(_markdown_citations(section.get("evidence", []), heading_level="####"))
+    lines.extend(_markdown_sublist("Management Questions", section.get("management_questions", []), heading_level=3))
+    lines.extend(_markdown_sublist("Board Discussion Points", section.get("board_discussion_points", []), heading_level=3))
+    lines.extend(_markdown_sublist("Recommendations", section.get("recommendations", []), heading_level=3))
+    return lines
+
+
 def _build_technology_report_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Technology Due Diligence Report",
@@ -3125,6 +3169,7 @@ def _build_technology_report_markdown(report: dict[str, Any]) -> str:
 
     lines.extend(_markdown_list("Management Questions", report.get("management_questions", [])))
     lines.extend(_markdown_list("Board Discussion Points", report.get("board_discussion_points", [])))
+    lines.extend(_markdown_ai_replicability_risk(report.get("ai_replicability_risk", {})))
     lines.extend(_markdown_list("Recommended Actions", report.get("recommended_actions", [])))
     lines.extend(["## 30/60/90-Day Plan", ""])
     plan = report.get("thirty_sixty_ninety_day_plan", {})
@@ -3362,6 +3407,17 @@ def _markdown_citations(citations: list[dict[str, Any]], heading_level: str) -> 
 
 def _markdown_list(title: str, values: list[str]) -> list[str]:
     lines = [f"## {title}", ""]
+    if not values:
+        lines.extend(["None provided.", ""])
+        return lines
+    lines.extend([f"- {value}" for value in values])
+    lines.append("")
+    return lines
+
+
+def _markdown_sublist(title: str, values: list[str], heading_level: int = 3) -> list[str]:
+    heading = "#" * max(1, heading_level)
+    lines = [f"{heading} {title}", ""]
     if not values:
         lines.extend(["None provided.", ""])
         return lines

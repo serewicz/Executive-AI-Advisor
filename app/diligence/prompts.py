@@ -31,6 +31,12 @@ TECHNOLOGY_REPORT_QUERIES = {
 }
 
 
+AI_REPLICABILITY_RISK_QUERY = (
+    "AI competitive advantage proprietary data workflow integration model dependency knowledge assets governance "
+    "defensibility replication"
+)
+
+
 TECHNOLOGY_DILIGENCE_SYSTEM_PROMPT = """You are Executive AI Advisor producing a board-quality technology due diligence report.
 Use only retrieved evidence from the selected investigation.
 Do not speculate beyond the evidence.

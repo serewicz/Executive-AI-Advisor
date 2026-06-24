@@ -94,6 +94,18 @@ class TechnologyDiligencePlan(BaseModel):
     days_61_90: list[str]
 
 
+class AIReplicabilityRiskSection(BaseModel):
+    overall_rating: RiskRating
+    executive_assessment: str
+    replicability_drivers: list[str]
+    defensibility_factors: list[str]
+    competitive_barriers: list[str]
+    evidence: list[TechnologyDiligenceCitation]
+    management_questions: list[str]
+    board_discussion_points: list[str]
+    recommendations: list[str]
+
+
 class RiskHeatmapRow(BaseModel):
     category: TechnologyReportCategory
     risk_rating: RiskRating
@@ -113,6 +125,7 @@ class TechnologyDiligenceReport(BaseModel):
     top_5_risks: list[str]
     management_questions: list[str]
     board_discussion_points: list[str]
+    ai_replicability_risk: AIReplicabilityRiskSection
     recommended_actions: list[str]
     thirty_sixty_ninety_day_plan: TechnologyDiligencePlan
     limitations: list[str]

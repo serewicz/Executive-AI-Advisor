@@ -9,6 +9,7 @@ from app.advisor.providers.factory import get_llm_provider
 from app.advisor.schemas import Citation
 from app.advisor.text import normalize_text_field
 from app.diligence.prompts import (
+    AI_REPLICABILITY_RISK_QUERY,
     ASSESSMENT_FOCUS,
     ASSESSMENT_QUERIES,
     TECHNOLOGY_DILIGENCE_SYSTEM_PROMPT,
@@ -17,6 +18,7 @@ from app.diligence.prompts import (
     build_technology_report_prompt,
 )
 from app.diligence.schemas import (
+    AIReplicabilityRiskSection,
     AssessmentType,
     DiligenceAssessmentResponse,
     DiligenceFinding,
@@ -132,11 +134,17 @@ def generate_technology_due_diligence_report(
         top_k=top_k,
         db=db,
     )
+    ai_replicability_results = _retrieve_ai_replicability_results(
+        document_set=document_set,
+        top_k=max(3, min(8, top_k // max(1, len(TECHNOLOGY_REPORT_QUERIES)))),
+        db=db,
+    )
     all_results = _dedupe_results(
         result
         for results in results_by_category.values()
         for result in results
-    )
+    ) + _dedupe_results(ai_replicability_results)
+    all_results = _dedupe_results(all_results)
     if not all_results:
         raise DiligenceValidationError("Document set has no chunks to analyze.")
 
@@ -145,6 +153,10 @@ def generate_technology_due_diligence_report(
         _build_report_finding(category, results, citation_map)
         for category, results in results_by_category.items()
     ]
+    ai_replicability_risk = _build_ai_replicability_risk_section(
+        ai_replicability_results or results_by_category.get("ai_readiness", []),
+        citation_map,
+    )
     risk_ratings = [finding.risk_rating for finding in findings]
     confidences = [finding.confidence for finding in findings]
     provider_draft = _draft_report_with_provider(
@@ -166,6 +178,7 @@ def generate_technology_due_diligence_report(
         top_5_risks=provider_draft.top_5_risks or _build_top_risks(findings),
         management_questions=provider_draft.management_questions or _build_management_questions(findings),
         board_discussion_points=provider_draft.board_discussion_points or _build_board_discussion_points(findings),
+        ai_replicability_risk=ai_replicability_risk,
         recommended_actions=provider_draft.recommended_actions or _build_report_recommended_actions(findings),
         thirty_sixty_ninety_day_plan=_build_report_plan(findings, include_100_day_plan),
         limitations=[
@@ -204,6 +217,23 @@ def _retrieve_report_results_by_category(
             results = _load_ordered_chunks_for_set(document_set=document_set, top_k=per_category_k, db=db)
         results_by_category[category] = _dedupe_results(results)[:per_category_k]
     return results_by_category
+
+
+def _retrieve_ai_replicability_results(
+    document_set: DocumentSet,
+    top_k: int,
+    db: Session,
+) -> list[SearchResult]:
+    try:
+        results = search_similar_chunks(
+            query=AI_REPLICABILITY_RISK_QUERY,
+            db=db,
+            top_k=top_k,
+            document_set_id=document_set.id,
+        )
+    except Exception:
+        results = []
+    return _dedupe_results(results)[:top_k]
 
 
 def _draft_report_with_provider(
@@ -357,7 +387,7 @@ def _build_report_citation_map(results: list[SearchResult]) -> dict[UUID, Techno
 def _query_for_result(result: SearchResult) -> str:
     return " ".join(
         query
-        for query in TECHNOLOGY_REPORT_QUERIES.values()
+        for query in [*TECHNOLOGY_REPORT_QUERIES.values(), AI_REPLICABILITY_RISK_QUERY]
         if any(term in result.content.lower() for term in query.lower().split()[:4])
     ) or "technology due diligence risk"
 
@@ -386,6 +416,178 @@ def _build_report_finding(
         recommended_owner=_recommended_owner(category),
         citations=citations,
     )
+
+
+def _build_ai_replicability_risk_section(
+    ai_readiness_results: list[SearchResult],
+    citation_map: dict[UUID, TechnologyDiligenceCitation],
+) -> AIReplicabilityRiskSection:
+    results = _dedupe_results(
+        result
+        for result in ai_readiness_results
+        if _result_matches_ai_replicability(result)
+    )
+    citations = [citation_map[result.chunk_id] for result in results if result.chunk_id in citation_map][:4]
+    overall_rating = _ai_replicability_rating(results)
+    labels = _citation_label_text(citations)
+
+    return AIReplicabilityRiskSection(
+        overall_rating=overall_rating,  # type: ignore[arg-type]
+        executive_assessment=_ai_replicability_executive_assessment(overall_rating, labels),
+        replicability_drivers=_ai_replicability_drivers(results, labels),
+        defensibility_factors=_ai_defensibility_factors(results, labels),
+        competitive_barriers=_ai_competitive_barriers(results, labels),
+        evidence=citations,
+        management_questions=[
+            "Could a competitor reproduce this AI capability within 6 months using publicly available models, tools, services, and data?",
+            "Which proprietary data, workflow, or knowledge assets materially improve AI-enabled outcomes?",
+            "How dependent is the organization on third-party model providers for differentiated customer or operating value?",
+            "What evidence shows that AI-enabled workflows are embedded deeply enough to create switching costs or margin protection?",
+        ],
+        board_discussion_points=[
+            "Review whether AI-enabled value is defensible or primarily a temporary productivity improvement.",
+            "Ask management to identify the evidence-backed barriers that would slow a capable competitor.",
+            "Confirm whether AI replicability risk affects valuation, customer retention, margin protection, or exit readiness.",
+        ],
+        recommendations=_ai_replicability_recommendations(overall_rating),
+    )
+
+
+def _result_matches_ai_replicability(result: SearchResult) -> bool:
+    text = result.content.lower()
+    terms = {
+        "ai",
+        "model",
+        "automation",
+        "machine learning",
+        "llm",
+        "data",
+        "workflow",
+        "governance",
+        "proprietary",
+        "knowledge",
+        "customer",
+    }
+    return any(term in text for term in terms)
+
+
+def _ai_replicability_rating(results: list[SearchResult]) -> str:
+    if not results:
+        return "yellow"
+    text = " ".join(result.content.lower() for result in results)
+    red_terms = {
+        "public ai",
+        "public model",
+        "third-party model",
+        "third party model",
+        "generic",
+        "no proprietary",
+        "limited proprietary",
+        "wrapper",
+        "vendor dependency",
+        "model dependency",
+        "no ai governance",
+        "unofficial ai",
+    }
+    green_terms = {
+        "proprietary data",
+        "exclusive data",
+        "workflow integration",
+        "governed",
+        "governance",
+        "auditability",
+        "human review",
+        "operational maturity",
+        "documented controls",
+        "approved documentation",
+    }
+    red_score = sum(1 for term in red_terms if term in text)
+    green_score = sum(1 for term in green_terms if term in text)
+    if red_score >= 2 and green_score <= 1:
+        return "red"
+    if green_score >= 3 and red_score == 0:
+        return "green"
+    return "yellow"
+
+
+def _ai_replicability_executive_assessment(rating: str, labels: str) -> str:
+    statements = {
+        "red": "High Replicability Risk: The organization's AI capability is primarily dependent on publicly available models and can likely be reproduced with limited investment.",
+        "yellow": "Moderate Replicability Risk: The organization possesses workflow and knowledge advantages, but model dependency remains significant.",
+        "green": "Low Replicability Risk: The organization combines proprietary data, workflow integration, operational maturity, and governance capabilities that create meaningful barriers to replication.",
+    }
+    suffix = f" {labels}" if labels else " Evidence is limited in the uploaded documents."
+    return f"{statements[rating]}{suffix}".strip()
+
+
+def _ai_replicability_drivers(results: list[SearchResult], labels: str) -> list[str]:
+    if not results:
+        return ["Uploaded documents do not provide enough evidence to identify specific AI replicability drivers."]
+    drivers = []
+    text = " ".join(result.content.lower() for result in results)
+    if any(term in text for term in ["third-party", "third party", "vendor", "public model", "model dependency", "llm"]):
+        drivers.append("AI capability appears dependent on third-party model or vendor capabilities.")
+    if any(term in text for term in ["limited proprietary", "no proprietary", "public", "generic"]):
+        drivers.append("Evidence suggests limited proprietary differentiation in AI data, models, or implementation.")
+    if any(term in text for term in ["manual", "unofficial", "no ai governance", "inconsistent"]):
+        drivers.append("AI use appears operationally immature or inconsistently governed.")
+    if not drivers:
+        drivers.append("Uploaded AI readiness evidence does not clearly establish whether capabilities are difficult to reproduce.")
+    return [f"{driver} {labels}".strip() for driver in drivers]
+
+
+def _ai_defensibility_factors(results: list[SearchResult], labels: str) -> list[str]:
+    if not results:
+        return ["No defensibility factors were directly evidenced in uploaded documents."]
+    factors = []
+    text = " ".join(result.content.lower() for result in results)
+    if "proprietary data" in text or "customer data" in text:
+        factors.append("Proprietary or customer data may support differentiated AI outputs.")
+    if "workflow" in text or "automation" in text:
+        factors.append("Workflow integration may create operating advantage if adoption and outcomes are measured.")
+    if "knowledge" in text or "documentation" in text or "approved documentation" in text:
+        factors.append("Documented knowledge assets may improve AI consistency and reduce simple replication.")
+    if "governance" in text or "human review" in text or "auditability" in text:
+        factors.append("Governance, review, or audit controls may support trusted AI deployment.")
+    if not factors:
+        factors.append("Uploaded documents do not provide direct evidence of proprietary data, workflow, knowledge, or governance advantages.")
+    return [f"{factor} {labels}".strip() for factor in factors]
+
+
+def _ai_competitive_barriers(results: list[SearchResult], labels: str) -> list[str]:
+    if not results:
+        return ["No competitive barriers were directly evidenced in uploaded documents."]
+    barriers = []
+    text = " ".join(result.content.lower() for result in results)
+    if "proprietary data" in text or "exclusive" in text:
+        barriers.append("Data access or data rights may create a barrier to competitor replication.")
+    if "workflow" in text or "integration" in text:
+        barriers.append("Embedded workflow integration may create switching costs or implementation friction.")
+    if "governance" in text or "compliance" in text or "auditability" in text:
+        barriers.append("Governance, compliance, or audit requirements may slow competitor deployment.")
+    if not barriers:
+        barriers.append("Uploaded documents do not directly evidence barriers that would prevent competitor replication.")
+    return [f"{barrier} {labels}".strip() for barrier in barriers]
+
+
+def _ai_replicability_recommendations(rating: str) -> list[str]:
+    if rating == "red":
+        return [
+            "Request evidence of proprietary data, workflow integration, knowledge assets, and governance controls before treating AI capability as defensible.",
+            "Require management to distinguish AI productivity benefits from durable competitive advantage.",
+            "Assess whether valuation, retention, or margin assumptions depend on AI capabilities competitors can reproduce.",
+        ]
+    if rating == "green":
+        return [
+            "Maintain evidence of proprietary data rights, workflow integration, operating controls, and governance maturity.",
+            "Track whether AI-enabled advantages continue to compound through usage, customer data, and process improvement.",
+            "Include AI defensibility evidence in board, investor, and exit readiness materials.",
+        ]
+    return [
+        "Validate which AI capabilities are meaningfully differentiated versus dependent on common model or vendor capabilities.",
+        "Strengthen evidence for proprietary data, workflow integration, knowledge assets, and operating controls.",
+        "Ask management to provide a 90-day plan to reduce model dependency and improve defensibility.",
+    ]
 
 
 def _build_risk_heatmap(findings: list[TechnologyDiligenceFinding]) -> list[RiskHeatmapRow]:

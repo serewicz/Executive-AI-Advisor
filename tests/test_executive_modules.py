@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.db.dependencies import get_db
 from app.diligence.schemas import (
+    AIReplicabilityRiskSection,
     RiskHeatmapRow,
     TechnologyDiligenceCitation,
     TechnologyDiligenceFinding,
@@ -62,6 +63,20 @@ def make_finding(category, risk_rating, owner="CTO"):
     )
 
 
+def make_ai_replicability_risk_section():
+    return AIReplicabilityRiskSection(
+        overall_rating="yellow",
+        executive_assessment="Moderate Replicability Risk: Evidence is limited to uploaded documents. [S1]",
+        replicability_drivers=["Third-party model dependency remains a diligence question. [S1]"],
+        defensibility_factors=["Workflow integration may create defensibility if measured. [S1]"],
+        competitive_barriers=["No durable barrier was fully evidenced. [S1]"],
+        evidence=[make_citation()],
+        management_questions=["Could a competitor reproduce this capability within 6 months?"],
+        board_discussion_points=["Review whether AI-enabled value is defensible."],
+        recommendations=["Validate proprietary data and workflow evidence."],
+    )
+
+
 def make_report(document_set_id):
     findings = [
         make_finding("security", "red", "CISO"),
@@ -89,6 +104,7 @@ def make_report(document_set_id):
         top_5_risks=["Security and key-person risks require immediate action."],
         management_questions=["Who owns remediation?"],
         board_discussion_points=["Review technology risk progress."],
+        ai_replicability_risk=make_ai_replicability_risk_section(),
         recommended_actions=["Assign owners and timelines."],
         thirty_sixty_ninety_day_plan=TechnologyDiligencePlan(
             days_1_30=["Address red risks."],

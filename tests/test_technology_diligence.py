@@ -149,6 +149,11 @@ def test_technology_report_returns_expected_schema(monkeypatch):
     assert body["top_5_risks"]
     assert body["management_questions"]
     assert body["board_discussion_points"]
+    assert body["ai_replicability_risk"]["overall_rating"] in {"red", "yellow", "green"}
+    assert body["ai_replicability_risk"]["executive_assessment"]
+    assert body["ai_replicability_risk"]["management_questions"]
+    assert body["ai_replicability_risk"]["board_discussion_points"]
+    assert body["ai_replicability_risk"]["recommendations"]
     assert body["recommended_actions"]
     assert body["thirty_sixty_ninety_day_plan"]["days_1_30"]
     assert body["limitations"]
@@ -258,6 +263,29 @@ def test_technology_report_markdown_export_includes_main_sections():
         ],
         "management_questions": ["What security evidence exists?"],
         "board_discussion_points": ["Discuss security governance."],
+        "ai_replicability_risk": {
+            "overall_rating": "yellow",
+            "executive_assessment": "Moderate Replicability Risk: The organization possesses workflow and knowledge advantages, but model dependency remains significant. [S1]",
+            "replicability_drivers": ["AI capability appears dependent on third-party model or vendor capabilities. [S1]"],
+            "defensibility_factors": ["Workflow integration may create operating advantage if adoption and outcomes are measured. [S1]"],
+            "competitive_barriers": ["Uploaded documents do not directly evidence barriers that would prevent competitor replication. [S1]"],
+            "evidence": [
+                {
+                    "source_label": "S1",
+                    "document_id": str(uuid4()),
+                    "document_title": "AI Readiness Assessment",
+                    "chunk_id": str(uuid4()),
+                    "page_start": 1,
+                    "page_end": 1,
+                    "excerpt": "AI readiness evidence.",
+                    "relevance_reason": "Supports AI replicability risk.",
+                    "full_source_text": "AI readiness evidence.",
+                }
+            ],
+            "management_questions": ["Could a competitor reproduce this AI capability within 6 months?"],
+            "board_discussion_points": ["Review whether AI-enabled value is defensible."],
+            "recommendations": ["Validate which AI capabilities are meaningfully differentiated."],
+        },
         "recommended_actions": ["CISO: Validate controls."],
         "thirty_sixty_ninety_day_plan": {
             "days_1_30": ["Validate evidence."],
@@ -278,6 +306,10 @@ def test_technology_report_markdown_export_includes_main_sections():
     assert "## Findings" in markdown
     assert "## Management Questions" in markdown
     assert "## Board Discussion Points" in markdown
+    assert "## AI Replicability Risk" in markdown
+    assert "### Overall Rating" in markdown
+    assert "### Executive Assessment" in markdown
+    assert "### Evidence" in markdown
     assert "## Recommended Actions" in markdown
     assert "## 30/60/90-Day Plan" in markdown
     assert "## Limitations" in markdown
