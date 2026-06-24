@@ -1,6 +1,7 @@
 import streamlit as st
 
 from ui.streamlit_app import (
+    _build_ai_replicability_risk_markdown,
     _build_hundred_day_plan_markdown,
     _build_technology_report_markdown,
     _build_qa_payload,
@@ -341,6 +342,60 @@ def test_export_filename_differs_by_plan_type():
     assert growth != turnaround
     assert "growth_equity" in growth
     assert "turnaround" in turnaround
+
+
+def test_ai_replicability_risk_export_filename_matches_required_pattern():
+    filename = build_export_filename("SampleCo Diligence", "ai_replicability_risk")
+
+    assert filename.startswith("SampleCo_Diligence_ai_replicability_risk_")
+    assert filename.endswith(".md")
+
+
+def test_ai_replicability_risk_markdown_export_uses_metadata_without_keys():
+    report = {
+        "document_set_id": "set-123",
+        "report_metadata": {
+            "investigation": "SampleCo Diligence",
+            "report_type": "ai_replicability_risk",
+            "provider": "OpenAI",
+            "model": "gpt-4o-mini",
+            "generated_at": "2026-06-10 14:32",
+            "document_set_id": "set-123",
+            "included_documents": ["ai-readiness.pdf"],
+        },
+        "overall_replicability_risk": "yellow",
+        "confidence": "medium",
+        "executive_summary": "AI replicability risk is moderate.",
+        "items": [],
+        "replicability_drivers": ["Third-party model dependency."],
+        "defensibility_factors": ["Proprietary workflow integration."],
+        "competitive_barriers": ["Customer data history."],
+        "missing_evidence": ["Data rights inventory."],
+        "management_questions": ["What proprietary assets create defensibility?"],
+        "board_discussion_points": ["Could a competitor reproduce this capability within 6 months?"],
+        "recommendations": ["Document defensibility evidence."],
+        "ninety_day_improvement_plan": {
+            "days_1_30": ["Inventory AI capabilities."],
+            "days_31_60": ["Improve workflow integration."],
+            "days_61_90": ["Re-score risk."],
+        },
+        "example_findings": {
+            "red": "Company is primarily a wrapper around third-party LLM APIs.",
+            "yellow": "Company combines third-party models with some proprietary workflow integration.",
+            "green": "Company possesses proprietary datasets and operational assets.",
+        },
+        "evidence": [],
+        "limitations": [],
+        "llm_api_key": "sk-secret",
+    }
+
+    markdown = _build_ai_replicability_risk_markdown(report)
+
+    assert "# AI Replicability Risk Assessment" in markdown
+    assert "Overall Replicability Risk: **Yellow**" in markdown
+    assert "- Report Type: ai_replicability_risk" in markdown
+    assert "ai-readiness.pdf" in markdown
+    assert "sk-secret" not in markdown
 
 
 def test_markdown_export_metadata_excludes_api_keys():

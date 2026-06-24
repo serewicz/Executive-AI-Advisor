@@ -44,6 +44,10 @@ class AIGovernanceAssessmentRequest(ExecutiveModuleRequest):
     pass
 
 
+class AIReplicabilityRiskAssessmentRequest(ExecutiveModuleRequest):
+    pass
+
+
 class RiskScorecardItem(BaseModel):
     category: ScorecardCategory
     status: RiskRating
@@ -110,6 +114,53 @@ class AIGovernanceAssessmentResponse(BaseModel):
     risk_rating: RiskRating
     executive_summary: str
     items: list[AIGovernanceAssessmentItem]
+    confidence: Confidence
+    limitations: list[str]
+
+
+ReplicabilityCategory = Literal[
+    "model_dependency",
+    "proprietary_data_advantage",
+    "workflow_advantage",
+    "knowledge_advantage",
+    "operational_advantage",
+    "regulatory_advantage",
+]
+
+
+class AIReplicabilityRiskItem(BaseModel):
+    category: ReplicabilityCategory
+    risk_level: RiskRating
+    replicability_driver: str
+    defensibility_factor: str
+    competitive_barrier: str
+    evidence: list[Citation] = []
+    missing_evidence: list[str]
+    management_questions: list[str]
+    recommendation: str
+
+
+class AIReplicabilityRiskPlan(BaseModel):
+    days_1_30: list[str]
+    days_31_60: list[str]
+    days_61_90: list[str]
+
+
+class AIReplicabilityRiskAssessmentResponse(BaseModel):
+    document_set_id: UUID
+    overall_replicability_risk: RiskRating
+    executive_summary: str
+    items: list[AIReplicabilityRiskItem]
+    replicability_drivers: list[str]
+    defensibility_factors: list[str]
+    competitive_barriers: list[str]
+    evidence: list[Citation]
+    missing_evidence: list[str]
+    management_questions: list[str]
+    board_discussion_points: list[str]
+    recommendations: list[str]
+    ninety_day_improvement_plan: AIReplicabilityRiskPlan
+    example_findings: dict[RiskRating, str]
     confidence: Confidence
     limitations: list[str]
 

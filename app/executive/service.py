@@ -7,6 +7,9 @@ from app.diligence.service import generate_technology_due_diligence_report
 from app.executive.schemas import (
     AIGovernanceAssessmentItem,
     AIGovernanceAssessmentResponse,
+    AIReplicabilityRiskAssessmentResponse,
+    AIReplicabilityRiskItem,
+    AIReplicabilityRiskPlan,
     BoardBriefResponse,
     BoardRisk,
     RiskScorecardItem,
@@ -99,6 +102,86 @@ AI_GOVERNANCE_SUCCESS_METRICS = {
     "auditability": "AI prompts, outputs, decisions, approvals, and exceptions are traceable for management review.",
     "vendor_model_dependency": "Critical AI vendors and models have documented risk review, fallback options, and renewal ownership.",
     "compliance_policy_readiness": "AI policies map to privacy, security, sector, and board governance obligations with evidence artifacts.",
+}
+
+
+AI_REPLICABILITY_CATEGORIES = {
+    "model_dependency": {
+        "finding_categories": {"ai_readiness"},
+        "driver": "Reliance on third-party models, APIs, generic prompting, or vendor features can make AI-enabled capabilities easier to reproduce.",
+        "defensibility": "Lower dependency risk comes from portable orchestration, evaluation benchmarks, proprietary retrieval, and provider fallback options.",
+        "barrier": "Model-agnostic architecture, proprietary evaluation data, and operational tuning make simple model substitution insufficient.",
+        "missing": [
+            "Approved AI architecture showing model providers, orchestration, fallback options, and evaluation criteria.",
+            "Evidence that output quality depends on proprietary context rather than generic model capability.",
+        ],
+    },
+    "proprietary_data_advantage": {
+        "finding_categories": {"ai_readiness", "security", "integration_readiness"},
+        "driver": "AI capabilities without proprietary, permissioned, high-quality data are more likely to be copied by competitors.",
+        "defensibility": "Durability improves when proprietary datasets are governed, rights-cleared, quality-controlled, and embedded in product or operating workflows.",
+        "barrier": "Exclusive data rights, accumulated customer history, data quality controls, and compounding usage data are difficult to replicate quickly.",
+        "missing": [
+            "Inventory of proprietary datasets, ownership, rights to use, quality controls, and AI use permissions.",
+            "Evidence that proprietary data materially improves AI output quality or customer value.",
+        ],
+    },
+    "workflow_advantage": {
+        "finding_categories": {"architecture", "engineering_org", "integration_readiness"},
+        "driver": "AI used as a standalone assistant is easier to copy than AI embedded into differentiated customer or operating workflows.",
+        "defensibility": "Workflow depth creates advantage when AI is integrated into core systems, measured processes, and customer-specific value delivery.",
+        "barrier": "Deep process integration, switching costs, adoption, and feedback loops make the full workflow harder to reproduce.",
+        "missing": [
+            "Workflow maps showing where AI changes cycle time, quality, cost, or customer outcomes.",
+            "Adoption and performance metrics for AI-enabled workflows.",
+        ],
+    },
+    "knowledge_advantage": {
+        "finding_categories": {"ai_readiness", "engineering_org", "key_person_risk"},
+        "driver": "Uncaptured institutional knowledge or generic knowledge bases reduce AI defensibility.",
+        "defensibility": "Unique domain expertise, decision logic, customer context, and governed knowledge assets improve durability.",
+        "barrier": "Expert-reviewed playbooks, taxonomies, decision standards, and historical case knowledge are hard to recreate without organizational experience.",
+        "missing": [
+            "Governed knowledge sources, playbooks, taxonomies, and decision standards used by AI systems.",
+            "Evidence that expert knowledge is captured, maintained, and used consistently.",
+        ],
+    },
+    "operational_advantage": {
+        "finding_categories": {"engineering_org", "architecture", "cloud_cost", "technical_debt"},
+        "driver": "AI pilots without operating discipline are easy for competitors to match and difficult to scale reliably.",
+        "defensibility": "Operational advantage comes from ownership, measurement, cost control, reliability, monitoring, and continuous improvement.",
+        "barrier": "A disciplined operating cadence and measurable improvement rate can make execution speed itself a competitive barrier.",
+        "missing": [
+            "Operating metrics for AI-enabled workflows, including quality, cost, latency, adoption, and business impact.",
+            "Named owners and review cadence for AI performance and improvement.",
+        ],
+    },
+    "regulatory_advantage": {
+        "finding_categories": {"security", "ai_readiness", "integration_readiness"},
+        "driver": "Weak governance, privacy, security, or auditability can make AI capabilities risky even when they are useful.",
+        "defensibility": "Regulatory advantage exists when compliance, auditability, trust, and data controls allow deployment in markets competitors struggle to enter.",
+        "barrier": "Certifications, audit trails, sector controls, data rights, and customer trust requirements can slow competitor replication.",
+        "missing": [
+            "AI governance, privacy, security, auditability, and compliance evidence for sensitive workflows.",
+            "Customer or regulatory requirements mapped to AI-enabled capabilities.",
+        ],
+    },
+}
+
+
+AI_REPLICABILITY_BOARD_QUESTIONS = [
+    "Could a competitor reproduce this capability within 6 months?",
+    "What proprietary assets create defensibility?",
+    "What switching costs exist?",
+    "What knowledge assets are unique?",
+    "How dependent are we on third-party model providers?",
+]
+
+
+AI_REPLICABILITY_EXAMPLE_FINDINGS = {
+    "red": "Company is primarily a wrapper around third-party LLM APIs with limited proprietary data or workflow differentiation.",
+    "yellow": "Company combines third-party models with some proprietary workflow integration and internal knowledge assets.",
+    "green": "Company possesses proprietary datasets, workflow integration, governance capabilities, and operational assets that are difficult to reproduce.",
 }
 
 
@@ -239,6 +322,53 @@ def generate_ai_governance_assessment(
     )
 
 
+def generate_ai_replicability_risk_assessment(
+    document_set_id: UUID,
+    db: Session,
+    top_k: int = 20,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_api_key: str | None = None,
+) -> AIReplicabilityRiskAssessmentResponse:
+    report = _build_report(document_set_id, db, top_k, llm_provider, llm_model, llm_api_key)
+    items = [
+        _ai_replicability_item(category, metadata, report.findings)
+        for category, metadata in AI_REPLICABILITY_CATEGORIES.items()
+    ]
+    overall_risk = _aggregate_item_status(items)
+    evidence = _unique_citations([citation for item in items for citation in item.evidence])[:6]
+    missing_evidence = _unique_strings([item for finding in items for item in finding.missing_evidence])
+    red_or_yellow_items = [item for item in items if item.risk_level in {"red", "yellow"}]
+
+    return AIReplicabilityRiskAssessmentResponse(
+        document_set_id=document_set_id,
+        overall_replicability_risk=overall_risk,  # type: ignore[arg-type]
+        executive_summary=_ai_replicability_summary(overall_risk, items),
+        items=items,
+        replicability_drivers=[
+            item.replicability_driver for item in items if item.risk_level in {"red", "yellow"}
+        ][:6],
+        defensibility_factors=[item.defensibility_factor for item in items][:6],
+        competitive_barriers=[item.competitive_barrier for item in items][:6],
+        evidence=evidence,
+        missing_evidence=missing_evidence[:10],
+        management_questions=_ai_replicability_management_questions(items),
+        board_discussion_points=AI_REPLICABILITY_BOARD_QUESTIONS,
+        recommendations=[
+            item.recommendation for item in (red_or_yellow_items or items)
+        ][:6],
+        ninety_day_improvement_plan=_ai_replicability_plan(overall_risk, red_or_yellow_items or items),
+        example_findings=AI_REPLICABILITY_EXAMPLE_FINDINGS,  # type: ignore[arg-type]
+        confidence=report.confidence,
+        limitations=[
+            "Assessment is limited to evidence in the active investigation workspace.",
+            "AI replicability risk is directional and should be validated with product, data, customer, and management interviews.",
+            "The assessment evaluates durability of AI-enabled advantage, not general technology due diligence risk.",
+            *report.limitations,
+        ],
+    )
+
+
 def _build_report(
     document_set_id: UUID,
     db: Session,
@@ -341,3 +471,141 @@ def _ai_business_impact(category: str, issue: str) -> str:
 def _ai_next_step(category: str) -> str:
     readable = category.replace("_", " ")
     return f"Create a documented {readable} control with owner, review cadence, success metric, and evidence artifact."
+
+
+def _ai_replicability_item(
+    category: str,
+    metadata: dict,
+    findings: list[TechnologyDiligenceFinding],
+) -> AIReplicabilityRiskItem:
+    matched = [
+        finding for finding in findings if finding.category in metadata["finding_categories"]
+    ]
+    status = _aggregate_status(matched)
+    leading = _leading_finding(matched)
+    evidence = _unique_citations([citation for finding in matched for citation in finding.citations])[:3]
+    missing_evidence = [] if evidence and status == "green" else metadata["missing"]
+    recommendation = _ai_replicability_recommendation(category, status)
+    driver = metadata["driver"]
+    if leading and status in {"red", "yellow"}:
+        driver = f"{driver} Current evidence: {leading.evidence_summary}"
+
+    return AIReplicabilityRiskItem(
+        category=category,  # type: ignore[arg-type]
+        risk_level=status,  # type: ignore[arg-type]
+        replicability_driver=driver,
+        defensibility_factor=metadata["defensibility"],
+        competitive_barrier=metadata["barrier"],
+        evidence=evidence,
+        missing_evidence=missing_evidence,
+        management_questions=_ai_replicability_category_questions(category),
+        recommendation=recommendation,
+    )
+
+
+def _aggregate_item_status(items: list[AIReplicabilityRiskItem]) -> str:
+    statuses = [item.risk_level for item in items]
+    if "red" in statuses:
+        return "red"
+    if "yellow" in statuses or not statuses:
+        return "yellow"
+    return "green"
+
+
+def _ai_replicability_summary(overall_risk: str, items: list[AIReplicabilityRiskItem]) -> str:
+    red_count = sum(1 for item in items if item.risk_level == "red")
+    yellow_count = sum(1 for item in items if item.risk_level == "yellow")
+    green_count = sum(1 for item in items if item.risk_level == "green")
+    if overall_risk == "red":
+        return (
+            "AI replicability risk is high. The available evidence suggests competitors may be able to reproduce "
+            "material AI-enabled capabilities unless management strengthens proprietary data, workflow integration, "
+            "knowledge assets, governance, and operating controls."
+        )
+    if overall_risk == "green":
+        return (
+            "AI replicability risk appears low based on the selected evidence. The company shows signs of durable "
+            "advantage through defensible assets, integrated workflows, operating discipline, or governance capabilities."
+        )
+    return (
+        "AI replicability risk is moderate. The company appears to have some defensibility, but durability is not fully "
+        f"proven across all dimensions ({red_count} red, {yellow_count} yellow, {green_count} green)."
+    )
+
+
+def _ai_replicability_recommendation(category: str, status: str) -> str:
+    readable = category.replace("_", " ")
+    if status == "red":
+        return f"Treat {readable} as an immediate defensibility gap and create a 30-day evidence-backed mitigation plan."
+    if status == "yellow":
+        return f"Strengthen {readable} with documented ownership, metrics, and evidence that competitors cannot easily match."
+    return f"Maintain {readable} as a defensibility asset and track whether the advantage continues to compound."
+
+
+def _ai_replicability_category_questions(category: str) -> list[str]:
+    readable = category.replace("_", " ")
+    return [
+        f"What evidence proves that {readable} is difficult for competitors to reproduce?",
+        f"What would a capable competitor need to match our {readable} position within 6 months?",
+        f"Which executive owns the durability and measurement of {readable}?",
+    ]
+
+
+def _ai_replicability_management_questions(items: list[AIReplicabilityRiskItem]) -> list[str]:
+    prioritized = [item for item in items if item.risk_level in {"red", "yellow"}] or items
+    questions = [
+        "Which AI-enabled capabilities materially affect growth, margin, retention, valuation, or exit readiness?",
+        *[question for item in prioritized for question in item.management_questions],
+    ]
+    return _unique_strings(questions)[:8]
+
+
+def _ai_replicability_plan(
+    overall_risk: str,
+    items: list[AIReplicabilityRiskItem],
+) -> AIReplicabilityRiskPlan:
+    focus = [item.category.replace("_", " ") for item in items[:3]]
+    focus_text = ", ".join(focus) if focus else "AI defensibility"
+    return AIReplicabilityRiskPlan(
+        days_1_30=[
+            f"Validate the highest-risk replicability dimensions: {focus_text}.",
+            "Inventory AI-enabled capabilities, model dependencies, proprietary data, workflow integrations, and knowledge assets.",
+            "Collect missing evidence for board review, including data rights, workflow metrics, governance artifacts, and evaluation results.",
+        ],
+        days_31_60=[
+            "Prioritize mitigation work that increases proprietary data use, workflow depth, knowledge capture, and provider portability.",
+            "Define operating metrics for AI quality, adoption, cost, latency, business impact, and customer value.",
+            "Assign executive owners for each red or yellow replicability dimension.",
+        ],
+        days_61_90=[
+            "Review progress with the board or operating partner against evidence, metrics, and defensibility improvements.",
+            "Update investment, diligence, or product roadmap assumptions based on remaining AI replicability risk.",
+            f"Re-score overall replicability risk and confirm whether it has moved from {overall_risk} toward green.",
+        ],
+    )
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    seen = set()
+    unique = []
+    for value in values:
+        normalized = value.strip()
+        if normalized and normalized not in seen:
+            unique.append(normalized)
+            seen.add(normalized)
+    return unique
+
+
+def _unique_citations(citations):
+    seen = set()
+    unique = []
+    for citation in citations:
+        key = getattr(citation, "chunk_id", None) or (
+            getattr(citation, "document_id", None),
+            getattr(citation, "source_label", None),
+            getattr(citation, "excerpt", None),
+        )
+        if key not in seen:
+            unique.append(citation)
+            seen.add(key)
+    return unique

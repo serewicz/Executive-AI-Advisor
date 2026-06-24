@@ -228,6 +228,52 @@ def test_ai_governance_assessment_endpoint_returns_executive_controls(monkeypatc
         assert item["success_metric"]
 
 
+def test_ai_replicability_risk_endpoint_returns_executive_assessment(monkeypatch):
+    document_set_id = uuid4()
+    install_report(monkeypatch, document_set_id)
+
+    try:
+        response = TestClient(app).post(
+            "/executive/ai-replicability-risk",
+            json={"document_set_id": str(document_set_id)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executive_summary"]
+    assert body["overall_replicability_risk"] in {"red", "yellow", "green"}
+    assert body["confidence"] == "medium"
+    assert len(body["items"]) == 6
+    categories = {item["category"] for item in body["items"]}
+    assert categories == {
+        "model_dependency",
+        "proprietary_data_advantage",
+        "workflow_advantage",
+        "knowledge_advantage",
+        "operational_advantage",
+        "regulatory_advantage",
+    }
+    assert "Could a competitor reproduce this capability within 6 months?" in body["board_discussion_points"]
+    assert body["replicability_drivers"]
+    assert body["defensibility_factors"]
+    assert body["competitive_barriers"]
+    assert body["missing_evidence"]
+    assert body["management_questions"]
+    assert body["recommendations"]
+    assert body["ninety_day_improvement_plan"]["days_1_30"]
+    assert body["example_findings"]["red"].startswith("Company is primarily a wrapper")
+    assert body["evidence"]
+    for item in body["items"]:
+        assert item["risk_level"] in {"red", "yellow", "green"}
+        assert item["replicability_driver"]
+        assert item["defensibility_factor"]
+        assert item["competitive_barrier"]
+        assert item["management_questions"]
+        assert item["recommendation"]
+
+
 def make_hundred_day_plan(document_set_id):
     action = HundredDayPlanAction(
         priority="high",

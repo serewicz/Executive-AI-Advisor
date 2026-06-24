@@ -7,6 +7,8 @@ from app.diligence.service import DiligenceDocumentSetNotFoundError, DiligenceVa
 from app.executive.schemas import (
     AIGovernanceAssessmentRequest,
     AIGovernanceAssessmentResponse,
+    AIReplicabilityRiskAssessmentRequest,
+    AIReplicabilityRiskAssessmentResponse,
     BoardBriefRequest,
     BoardBriefResponse,
     ExecutiveHundredDayPlanRequest,
@@ -16,6 +18,7 @@ from app.executive.schemas import (
 )
 from app.executive.service import (
     generate_ai_governance_assessment,
+    generate_ai_replicability_risk_assessment,
     generate_board_brief,
     generate_executive_100_day_plan,
     generate_risk_scorecard,
@@ -98,6 +101,28 @@ def ai_governance_assessment(
 ) -> AIGovernanceAssessmentResponse:
     try:
         return generate_ai_governance_assessment(
+            document_set_id=request.document_set_id,
+            db=db,
+            top_k=request.top_k,
+            llm_provider=request.llm_provider,
+            llm_model=request.llm_model,
+            llm_api_key=request.llm_api_key,
+        )
+    except DiligenceDocumentSetNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except DiligenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except LLMError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.post("/ai-replicability-risk", response_model=AIReplicabilityRiskAssessmentResponse)
+def ai_replicability_risk_assessment(
+    request: AIReplicabilityRiskAssessmentRequest,
+    db: Session = Depends(get_db),
+) -> AIReplicabilityRiskAssessmentResponse:
+    try:
+        return generate_ai_replicability_risk_assessment(
             document_set_id=request.document_set_id,
             db=db,
             top_k=request.top_k,

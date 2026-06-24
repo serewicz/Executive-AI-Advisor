@@ -84,6 +84,7 @@ LOCAL_UI_STATE_KEYS = [
     "executive_board_brief",
     "executive_hundred_day_plan",
     "ai_governance_assessment",
+    "ai_replicability_risk_assessment",
     "evaluation_response",
     "evaluation_questions_text",
     "evaluation_questions_initialized",
@@ -159,6 +160,7 @@ def _initialize_state() -> None:
         "executive_board_brief": None,
         "executive_hundred_day_plan": None,
         "ai_governance_assessment": None,
+        "ai_replicability_risk_assessment": None,
         "evaluation_response": None,
         "evaluation_questions_text": "",
         "evaluation_questions_initialized": False,
@@ -710,7 +712,7 @@ def _render_executive_modules_section() -> None:
             key="executive_modules_plan_type",
         )
 
-    buttons = st.columns(4)
+    buttons = st.columns(5)
     disabled = not document_set_id
     payload_base = {"document_set_id": document_set_id, "top_k": top_k, **_generation_provider_payload()}
 
@@ -738,6 +740,14 @@ def _render_executive_modules_section() -> None:
             response = _post_json("/executive/ai-governance-assessment", payload_base)
             if response:
                 st.session_state.ai_governance_assessment = _with_report_metadata(response, "ai_governance_assessment")
+    with buttons[4]:
+        if st.button("AI Replicability Risk", disabled=disabled, use_container_width=True):
+            response = _post_json("/executive/ai-replicability-risk", payload_base)
+            if response:
+                st.session_state.ai_replicability_risk_assessment = _with_report_metadata(
+                    response,
+                    "ai_replicability_risk",
+                )
 
     tabs = st.tabs(
         [
@@ -745,6 +755,7 @@ def _render_executive_modules_section() -> None:
             "Board Brief Generator",
             "100-Day Technology Plan",
             "AI Governance Assessment",
+            "AI Replicability Risk",
         ]
     )
     with tabs[0]:
@@ -767,6 +778,11 @@ def _render_executive_modules_section() -> None:
             _render_ai_governance_assessment(st.session_state.ai_governance_assessment)
         else:
             st.info("Generate an AI governance assessment for executive review.")
+    with tabs[4]:
+        if st.session_state.ai_replicability_risk_assessment:
+            _render_ai_replicability_risk_assessment(st.session_state.ai_replicability_risk_assessment)
+        else:
+            st.info("Generate an AI replicability risk assessment for executive review.")
 
 
 def _render_executive_risk_scorecard(scorecard: dict[str, Any]) -> None:
@@ -879,6 +895,76 @@ def _render_ai_governance_assessment(report: dict[str, Any]) -> None:
         key=f"{_download_key(report, 'ai_governance_assessment')}_inline",
         use_container_width=True,
     )
+
+
+def _render_ai_replicability_risk_assessment(report: dict[str, Any]) -> None:
+    st.subheader("AI Replicability Risk Assessment")
+    _render_report_metadata(report)
+    col1, col2 = st.columns(2)
+    col1.metric("Overall Replicability Risk", str(report.get("overall_replicability_risk", "yellow")).title())
+    with col2:
+        _render_confidence(report.get("confidence", "low"))
+    st.markdown(render_risk_badge(str(report.get("overall_replicability_risk", "yellow"))), unsafe_allow_html=True)
+
+    st.markdown("#### Executive Summary")
+    st.markdown(normalize_text_field(report.get("executive_summary", "No executive summary returned.")))
+
+    st.dataframe(
+        [
+            {
+                "Category": _format_summary_type(item.get("category", "")),
+                "Risk": str(item.get("risk_level", "")).title(),
+                "Replicability Driver": item.get("replicability_driver", ""),
+                "Competitive Barrier": item.get("competitive_barrier", ""),
+            }
+            for item in report.get("items", [])
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    for item in report.get("items", []):
+        with st.expander(_format_summary_type(item.get("category", ""))):
+            st.markdown(render_risk_badge(str(item.get("risk_level", "yellow"))), unsafe_allow_html=True)
+            st.markdown(f"**Replicability Driver:** {item.get('replicability_driver', '')}")
+            st.markdown(f"**Defensibility Factor:** {item.get('defensibility_factor', '')}")
+            st.markdown(f"**Competitive Barrier:** {item.get('competitive_barrier', '')}")
+            _render_list("Missing Evidence", item.get("missing_evidence", []))
+            _render_list("Management Questions", item.get("management_questions", []))
+            st.markdown(f"**Recommendation:** {item.get('recommendation', '')}")
+            _render_citations(item.get("evidence", []), title="Evidence", use_expanders=False)
+
+    _render_list("Replicability Drivers", report.get("replicability_drivers", []))
+    _render_list("Defensibility Factors", report.get("defensibility_factors", []))
+    _render_list("Competitive Barriers", report.get("competitive_barriers", []))
+    _render_list("Missing Evidence", report.get("missing_evidence", []))
+    _render_list("Management Questions", report.get("management_questions", []))
+    _render_list("Board Discussion Points", report.get("board_discussion_points", []))
+    _render_list("Recommendations", report.get("recommendations", []))
+    _render_ai_replicability_risk_plan(report.get("ninety_day_improvement_plan", {}))
+    _render_limitations(report.get("limitations", []))
+    _render_citations(report.get("evidence", []), title="AI Replicability Risk Citations")
+
+    markdown = _build_ai_replicability_risk_markdown(report)
+    st.download_button(
+        label="Download AI Replicability Risk Assessment.md",
+        data=markdown,
+        file_name=_export_filename(report, "ai_replicability_risk"),
+        mime="text/markdown",
+        key=f"{_download_key(report, 'ai_replicability_risk')}_inline",
+        use_container_width=True,
+    )
+
+
+def _render_ai_replicability_risk_plan(plan: dict[str, list[str]]) -> None:
+    st.markdown("#### 90-Day Improvement Plan")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        _render_list("Days 1-30", plan.get("days_1_30", []))
+    with col2:
+        _render_list("Days 31-60", plan.get("days_31_60", []))
+    with col3:
+        _render_list("Days 61-90", plan.get("days_61_90", []))
 
 
 def _render_technology_report_section() -> None:
@@ -1636,6 +1722,7 @@ def _render_export_section() -> None:
     executive_board_brief = st.session_state.executive_board_brief
     executive_hundred_day_plan = st.session_state.executive_hundred_day_plan
     ai_governance_assessment = st.session_state.ai_governance_assessment
+    ai_replicability_risk_assessment = st.session_state.ai_replicability_risk_assessment
 
     if not any(
         [
@@ -1648,6 +1735,7 @@ def _render_export_section() -> None:
             executive_board_brief,
             executive_hundred_day_plan,
             ai_governance_assessment,
+            ai_replicability_risk_assessment,
         ]
     ):
         st.info("Generate an executive output before exporting.")
@@ -1702,6 +1790,17 @@ def _render_export_section() -> None:
             file_name=_export_filename(ai_governance_assessment, "ai_governance_assessment"),
             mime="text/markdown",
             key=_download_key(ai_governance_assessment, "ai_governance_assessment"),
+            use_container_width=True,
+        )
+
+    if ai_replicability_risk_assessment:
+        ai_replicability_markdown = _build_ai_replicability_risk_markdown(ai_replicability_risk_assessment)
+        st.download_button(
+            label="Download AI Replicability Risk Assessment.md",
+            data=ai_replicability_markdown,
+            file_name=_export_filename(ai_replicability_risk_assessment, "ai_replicability_risk"),
+            mime="text/markdown",
+            key=_download_key(ai_replicability_risk_assessment, "ai_replicability_risk"),
             use_container_width=True,
         )
 
@@ -2657,6 +2756,87 @@ def _build_ai_governance_assessment_markdown(report: dict[str, Any]) -> str:
         )
         lines.extend(_markdown_citations(item.get("evidence", []), heading_level="####"))
     lines.extend(_markdown_list("Limitations", report.get("limitations", [])))
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_ai_replicability_risk_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# AI Replicability Risk Assessment",
+        "",
+        *_metadata_lines(report, "ai_replicability_risk"),
+        f"Investigation ID: `{report.get('document_set_id', '')}`",
+        f"Overall Replicability Risk: **{str(report.get('overall_replicability_risk', '')).title()}**",
+        f"Confidence: **{str(report.get('confidence', '')).title()}**",
+        "",
+        "## Executive Summary",
+        normalize_text_field(report.get("executive_summary", "")),
+        "",
+        "| Category | Risk | Replicability Driver | Defensibility Factor | Competitive Barrier | Recommendation |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for item in report.get("items", []):
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _format_summary_type(item.get("category", "")),
+                    str(item.get("risk_level", "")).title(),
+                    str(item.get("replicability_driver", "")).replace("|", "\\|"),
+                    str(item.get("defensibility_factor", "")).replace("|", "\\|"),
+                    str(item.get("competitive_barrier", "")).replace("|", "\\|"),
+                    str(item.get("recommendation", "")).replace("|", "\\|"),
+                ]
+            )
+            + " |"
+        )
+    lines.extend([""])
+    for item in report.get("items", []):
+        lines.extend(
+            [
+                f"## {_format_summary_type(item.get('category', ''))}",
+                f"- Risk Level: {str(item.get('risk_level', '')).title()}",
+                "",
+                f"**Replicability Driver:** {item.get('replicability_driver', '')}",
+                "",
+                f"**Defensibility Factor:** {item.get('defensibility_factor', '')}",
+                "",
+                f"**Competitive Barrier:** {item.get('competitive_barrier', '')}",
+                "",
+            ]
+        )
+        lines.extend(_markdown_list("Missing Evidence", item.get("missing_evidence", [])))
+        lines.extend(_markdown_list("Management Questions", item.get("management_questions", [])))
+        lines.extend(
+            [
+                f"**Recommendation:** {item.get('recommendation', '')}",
+                "",
+                "### Evidence",
+                "",
+            ]
+        )
+        lines.extend(_markdown_citations(item.get("evidence", []), heading_level="####"))
+
+    lines.extend(_markdown_list("Replicability Drivers", report.get("replicability_drivers", [])))
+    lines.extend(_markdown_list("Defensibility Factors", report.get("defensibility_factors", [])))
+    lines.extend(_markdown_list("Competitive Barriers", report.get("competitive_barriers", [])))
+    lines.extend(_markdown_list("Missing Evidence", report.get("missing_evidence", [])))
+    lines.extend(_markdown_list("Management Questions", report.get("management_questions", [])))
+    lines.extend(_markdown_list("Board Discussion Points", report.get("board_discussion_points", [])))
+    lines.extend(_markdown_list("Recommendations", report.get("recommendations", [])))
+
+    lines.extend(["## 90-Day Improvement Plan", ""])
+    plan = report.get("ninety_day_improvement_plan", {})
+    lines.extend(_markdown_list("Days 1-30", plan.get("days_1_30", [])))
+    lines.extend(_markdown_list("Days 31-60", plan.get("days_31_60", [])))
+    lines.extend(_markdown_list("Days 61-90", plan.get("days_61_90", [])))
+
+    lines.extend(["## Example Findings", ""])
+    for rating, finding in report.get("example_findings", {}).items():
+        lines.extend([f"### {str(rating).title()}", finding, ""])
+
+    lines.extend(_markdown_list("Limitations", report.get("limitations", [])))
+    lines.extend(["## Citations", ""])
+    lines.extend(_markdown_citations(report.get("evidence", []), heading_level="###"))
     return "\n".join(lines).strip() + "\n"
 
 
