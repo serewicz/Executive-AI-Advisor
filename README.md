@@ -37,6 +37,7 @@ Executive assessment of AI maturity, governance, privacy, security, auditability
 - [Board Brief](examples/board-brief.md)
 - [100-Day Technology Plan](examples/100-day-technology-plan.md)
 - [AI Governance Assessment](examples/ai-governance-assessment.md)
+- [AI Replicability Risk Assessment](docs/AI-Replicability-Risk-Assessment.md): Assesses whether AI-enabled capabilities create durable competitive advantage or can be easily replicated by competitors.
 
 ## Who It Is For
 
