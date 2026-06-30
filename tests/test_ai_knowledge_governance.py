@@ -106,7 +106,11 @@ def test_ai_knowledge_governance_response_contains_expected_schema(monkeypatch):
     assert body["findings"]
     assert body["90_day_readiness_plan"]["days_1_30"]
     assert any("legal advice" in limitation.lower() for limitation in body["limitations"])
+    assert any("reporting obligations vary" in limitation.lower() for limitation in body["limitations"])
     assert any("local slms" in limitation.lower() for limitation in body["limitations"])
+    assert any("what qualifies as an ai incident" in question.lower() for question in body["management_questions"])
+    assert any("executive or board escalation" in question.lower() for question in body["management_questions"])
+    assert any("ai incident response plan" in point.lower() for point in body["board_discussion_points"])
 
     finding = body["findings"][0]
     assert finding["readiness"] in {"red", "yellow", "green"}
@@ -216,6 +220,19 @@ def test_missing_ai_cost_tracking_produces_finding():
     assert readiness_for_category("cost_governance", [result]) == "yellow"
     assert "AI cost tracking report" in missing
     assert "budget owner" in missing
+
+
+def test_missing_ai_incident_response_evidence_produces_finding():
+    result = make_search_result(
+        content="The company has approved AI tools and data handling guidance, but no formal failure handling process."
+    )
+
+    missing = missing_evidence_for_category("ai_incident_response", [result])
+
+    assert readiness_for_category("ai_incident_response", [result]) == "red"
+    assert "AI incident definition" in missing
+    assert "AI incident response runbook" in missing
+    assert "board notification criteria" in missing
 
 
 def test_ai_knowledge_governance_markdown_export_includes_major_sections():

@@ -73,6 +73,13 @@ MISSING_EVIDENCE_BY_CATEGORY: dict[AIKnowledgeGovernanceCategory, list[str]] = {
         "AI usage policy",
         "shadow AI reduction plan",
     ],
+    "ai_incident_response": [
+        "AI incident definition",
+        "AI incident response runbook",
+        "AI escalation path",
+        "board notification criteria",
+        "post-incident review process",
+    ],
 }
 
 
@@ -88,6 +95,7 @@ KEYWORDS_BY_CATEGORY: dict[AIKnowledgeGovernanceCategory, set[str]] = {
     "vendor_and_provider_risk": {"llm provider", "vendor risk", "saas ai", "data retention", "contractual", "third party"},
     "cost_governance": {"ai cost", "token cost", "inference cost", "usage", "chargeback", "showback", "budget"},
     "employee_enablement": {"approved ai tools", "training", "usage policy", "shadow ai", "knowledge discovery"},
+    "ai_incident_response": {"ai incident", "incident response", "escalation", "board notification", "post-incident", "legal", "compliance"},
 }
 
 WEAKNESS_TERMS = {
@@ -140,6 +148,10 @@ def readiness_for_category(
         return "red"
     if category == "cost_governance" and not any(term in text for term in {"cost", "token", "inference", "usage", "budget"}):
         return "yellow"
+    if category == "ai_incident_response" and not any(
+        term in text for term in {"ai incident", "incident response", "escalation", "board notification", "post-incident"}
+    ):
+        return "red"
     if weakness_hits >= 2 and maturity_hits == 0:
         return "red"
     if keyword_hits >= 3 and maturity_hits >= 2 and weakness_hits == 0:

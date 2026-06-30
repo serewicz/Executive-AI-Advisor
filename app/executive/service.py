@@ -88,6 +88,7 @@ AI_GOVERNANCE_CATEGORIES = {
     "auditability": ("AI decisions and outputs need traceability for governance and management review.", "CISO"),
     "vendor_model_dependency": ("Model or vendor concentration can create continuity, cost, or data residency risk.", "CTO"),
     "compliance_policy_readiness": ("AI policy readiness should be validated against privacy, security, and sector obligations.", "Board"),
+    "ai_incident_response": ("AI governance should include incident response, escalation paths, post-incident review, and board reporting criteria.", "CISO"),
 }
 
 
@@ -102,6 +103,7 @@ AI_GOVERNANCE_SUCCESS_METRICS = {
     "auditability": "AI prompts, outputs, decisions, approvals, and exceptions are traceable for management review.",
     "vendor_model_dependency": "Critical AI vendors and models have documented risk review, fallback options, and renewal ownership.",
     "compliance_policy_readiness": "AI policies map to privacy, security, sector, and board governance obligations with evidence artifacts.",
+    "ai_incident_response": "AI incident response runbook defines incident criteria, escalation path, legal/compliance involvement, board notification criteria, and post-incident review.",
 }
 
 
@@ -317,6 +319,7 @@ def generate_ai_governance_assessment(
         limitations=[
             "Assessment is limited to evidence in the active investigation workspace.",
             "AI governance maturity is directional and should be validated with management interviews and policy artifacts.",
+            "This assessment does not provide legal advice. Reporting obligations vary by jurisdiction, company role, system type, and incident type. Legal and compliance counsel should confirm applicable obligations.",
             *report.limitations,
         ],
     )

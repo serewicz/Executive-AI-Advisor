@@ -42,6 +42,15 @@ Using a user-owned key can be useful for:
 Generated reports and Markdown exports include provider and model metadata, generation time, document set ID, and included document names. They never include API keys.
 
 CRA Readiness Assessment is a diligence and governance readiness workflow. It is not legal advice and does not certify compliance. Legal counsel should confirm applicability, product classification, conformity assessment pathway, and reporting obligations before leadership relies on CRA-related conclusions.
+
+## AI Incident Response and Board Escalation
+
+AI governance should include incident response, not only acceptable-use policies. Organizations should define what qualifies as an AI incident, including sensitive data exposure, unauthorized model behavior, unsafe outputs, model/provider compromise, prompt injection, loss of human oversight, material hallucination in high-risk workflows, or uncontrolled AI system behavior.
+
+Management should define escalation paths for security, legal, compliance, executive leadership, and the board. Boards should receive clear reporting on material AI incidents, remediation status, control gaps, and lessons learned.
+
+This is governance readiness guidance, not legal advice. Reporting obligations vary by jurisdiction, company role, system type, and incident type. Legal and compliance counsel should confirm applicable obligations.
+
 Security rules:
 
 - Do not commit API keys to Git.

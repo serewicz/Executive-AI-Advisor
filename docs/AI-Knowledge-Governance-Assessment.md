@@ -54,6 +54,17 @@ The assessment evaluates:
 - Vendor and provider risk
 - Cost governance
 - Employee enablement
+- AI incident response
+
+## AI Incident Response and Board Escalation
+
+AI governance should include incident response, not only acceptable-use policies.
+
+Organizations should define what qualifies as an AI incident. AI incidents may include sensitive data exposure, unauthorized model behavior, unsafe outputs, model/provider compromise, prompt injection, loss of human oversight, material hallucination in high-risk workflows, or uncontrolled AI system behavior.
+
+Management should define escalation paths for security, legal, compliance, executive leadership, and the board. Boards should receive clear reporting on material AI incidents, remediation status, control gaps, and lessons learned.
+
+This is governance readiness guidance, not legal advice. Reporting obligations vary by jurisdiction, company role, system type, and incident type. Legal and compliance counsel should confirm applicable obligations.
 
 ## Interpreting Red / Yellow / Green
 

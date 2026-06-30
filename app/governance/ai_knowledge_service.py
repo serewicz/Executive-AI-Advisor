@@ -52,6 +52,7 @@ AI_KNOWLEDGE_CATEGORY_QUERIES: dict[AIKnowledgeGovernanceCategory, str] = {
     "vendor_and_provider_risk": "LLM provider vendor risk SaaS AI data retention contractual protections third party AI model risk",
     "cost_governance": "AI cost token cost inference cost provider usage chargeback showback budget controls",
     "employee_enablement": "approved AI tools employee training AI usage policy shadow AI internal knowledge discovery",
+    "ai_incident_response": "AI incident response escalation board notification legal compliance customer notification provider incident post-incident review audit trail",
 }
 
 AI_KNOWLEDGE_CATEGORY_ORDER: tuple[AIKnowledgeGovernanceCategory, ...] = (
@@ -66,6 +67,7 @@ AI_KNOWLEDGE_CATEGORY_ORDER: tuple[AIKnowledgeGovernanceCategory, ...] = (
     "vendor_and_provider_risk",
     "cost_governance",
     "employee_enablement",
+    "ai_incident_response",
 )
 
 
@@ -122,6 +124,7 @@ def generate_ai_knowledge_governance_assessment(
             "Regulated data handling should be reviewed with legal and compliance leaders.",
             "Local SLMs and private model endpoints reduce some leakage risks but still require access controls, monitoring, testing, evaluation, and governance.",
             "RAG improves grounding but does not guarantee correctness.",
+            "Reporting obligations vary by jurisdiction, company role, system type, and incident type. Legal and compliance counsel should confirm applicable obligations.",
             "Management should validate cited evidence and provide corroborating artifacts before relying on findings.",
             *draft.get("limitations", []),
         ],
@@ -332,6 +335,7 @@ def _business_impact(category: AIKnowledgeGovernanceCategory, readiness: str, la
         "vendor_and_provider_risk": "Unreviewed providers can create data retention, contractual, continuity, and third-party AI risk.",
         "cost_governance": "Untracked AI usage can create unmanaged token, inference, and internal model operating cost.",
         "employee_enablement": "Poor enablement increases shadow AI usage and reduces adoption of governed knowledge workflows.",
+        "ai_incident_response": "Weak AI incident response can delay containment, legal/compliance review, customer communications, executive escalation, and board visibility.",
     }
     prefix = "Material" if readiness == "red" else "Moderate" if readiness == "yellow" else "Limited"
     return f"{prefix} concern: {impacts[category]} {labels}".strip()
@@ -364,6 +368,7 @@ def _recommended_action(category: AIKnowledgeGovernanceCategory, readiness: str)
         "vendor_and_provider_risk": "Review AI providers for data handling, retention, contractual protections, continuity, and third-party model risk.",
         "cost_governance": "Implement AI cost tracking for provider spend, token/inference usage, private model operations, and budget ownership.",
         "employee_enablement": "Publish approved AI tool guidance and train staff on safe knowledge discovery workflows.",
+        "ai_incident_response": "Define AI incident criteria, escalation paths, board notification triggers, legal/compliance involvement, model/provider handling, and post-incident review process.",
     }
     if readiness == "green":
         return f"Maintain evidence and review cadence. {actions[category]}"
@@ -383,6 +388,7 @@ def _recommended_owner(category: AIKnowledgeGovernanceCategory):
         "vendor_and_provider_risk": "Legal",
         "cost_governance": "Operations",
         "employee_enablement": "Product",
+        "ai_incident_response": "CISO",
     }
     return owners[category]
 
@@ -420,6 +426,12 @@ def _management_questions(findings: list[AIKnowledgeGovernanceFinding]) -> list[
         "Do employees have a governed way to find internal knowledge without unsanctioned AI tools?",
         "How are retrieval permissions enforced for confidential or restricted documents?",
         "How are AI provider usage, model choice, outputs, and costs logged and reviewed?",
+        "What qualifies as an AI incident?",
+        "Who owns AI incident response?",
+        "When is legal or compliance engaged?",
+        "What AI incidents require executive or board escalation?",
+        "How are model/provider incidents tracked?",
+        "Are post-incident reviews documented?",
     ]
 
 
@@ -429,6 +441,10 @@ def _board_discussion_points(findings: list[AIKnowledgeGovernanceFinding]) -> li
         "Whether AI knowledge use creates material IP, customer data, compliance, or operating risk.",
         "Which knowledge classes can use external LLMs and which require governed retrieval or private/local models.",
         "Whether the organization has enough auditability to investigate AI-assisted knowledge exposure.",
+        "Whether management has an AI incident response plan.",
+        "Which AI incidents would be reported to the board.",
+        "How the company detects, contains, and remediates AI-related failures.",
+        "Whether AI incident trends are reviewed alongside cybersecurity and operational risk.",
         f"Management should address the highest-priority knowledge governance areas: {', '.join(f.category.replace('_', ' ') for f in material_findings[:4])}.",
     ]
 
@@ -446,12 +462,14 @@ def _readiness_plan(findings: list[AIKnowledgeGovernanceFinding]) -> AIKnowledge
             "Classify sensitive data and proprietary IP.",
             "Identify high-risk shadow AI usage.",
             "Define approved AI usage policy and data handling rules.",
+            "Define AI incident criteria, severity levels, and escalation owners.",
             *[finding.recommended_action for finding in red_findings[:2]],
         ],
         days_31_60=[
             "Implement a pilot RAG workflow over low/medium-risk internal knowledge.",
             "Evaluate OpenSearch/vector store options for governed enterprise search.",
             "Define retrieval access controls and audit logging.",
+            "Create AI incident response runbook and board escalation criteria.",
             "Identify SLM/private model candidates for sensitive IP workflows.",
             "Create AI cost tracking approach.",
             *[finding.recommended_action for finding in yellow_findings[:2]],
@@ -460,6 +478,7 @@ def _readiness_plan(findings: list[AIKnowledgeGovernanceFinding]) -> AIKnowledge
             "Expand governed retrieval to priority workflows.",
             "Pilot SLM/private model pattern for a sensitive IP workflow.",
             "Train staff on approved AI usage and knowledge discovery workflows.",
+            "Run an AI incident tabletop and document lessons learned.",
             "Create board-level AI knowledge governance report.",
             "Review policy compliance and refine controls.",
         ],

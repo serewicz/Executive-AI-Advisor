@@ -19,6 +19,7 @@ AIKnowledgeGovernanceCategory = Literal[
     "vendor_and_provider_risk",
     "cost_governance",
     "employee_enablement",
+    "ai_incident_response",
 ]
 AIKnowledgeGovernanceOwner = Literal[
     "CTO",

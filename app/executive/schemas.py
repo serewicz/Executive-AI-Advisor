@@ -97,6 +97,7 @@ class AIGovernanceAssessmentItem(BaseModel):
         "auditability",
         "vendor_model_dependency",
         "compliance_policy_readiness",
+        "ai_incident_response",
     ]
     maturity_level: MaturityLevel
     risk_level: RiskRating

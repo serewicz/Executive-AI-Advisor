@@ -61,7 +61,7 @@ Executive assessment of AI maturity, governance, privacy, security, auditability
 - Generate Technology Risk Scorecards with red/yellow/green ratings, confidence levels, business impact, owners, timelines, and success metrics
 - Generate Board Briefs with executive summaries, top risks, management questions, recommended decisions, citations, confidence, and limitations
 - Generate 100-Day Technology Plans for growth equity, acquisition integration, and turnaround scenarios
-- Generate AI Governance Assessments covering AI use-case clarity, data governance, security and privacy, model/output evaluation, human oversight, cost controls, auditability, vendor risk, and policy readiness
+- Generate AI Governance Assessments covering AI use-case clarity, data governance, security and privacy, model/output evaluation, human oversight, cost controls, auditability, vendor risk, and policy readiness, including acceptable-use policies, knowledge governance, incident response, and board escalation
 - Generate AI Knowledge Governance Assessments that evaluate whether an organization is governing enterprise knowledge appropriately across data classification, RAG readiness, enterprise search, sensitive IP protection, private model readiness, auditability, provider risk, and AI cost governance
 - Upload PDFs with source type and classification metadata
 - Create diligence workspaces and upload multiple PDFs per investigation

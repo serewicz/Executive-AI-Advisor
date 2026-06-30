@@ -141,7 +141,7 @@ Use the modules after documents have been uploaded, processed, and embedded:
 - Technology Risk Scorecard: red/yellow/green scoring across architecture, security, AI governance, data handling, cloud/infrastructure, delivery predictability, key-person risk, technical debt, and compliance readiness.
 - Board Brief Generator: concise board-ready executive summary, top risks, business impact, decisions needed, management questions, confidence, limitations, and citations.
 - 100-Day Technology Plan: scenario-specific plan for growth equity, acquisition integration, or turnaround workflows.
-- AI Governance Assessment: executive review of AI use-case clarity, business alignment, data governance, security and privacy, model/output evaluation, human review, cost controls, auditability, vendor/model dependency, and policy readiness.
+- AI Governance Assessment: executive review of AI use-case clarity, business alignment, data governance, security and privacy, model/output evaluation, human review, cost controls, auditability, vendor/model dependency, policy readiness, incident response, and board escalation.
 
 Each output is designed to answer:
 
@@ -151,6 +151,14 @@ Each output is designed to answer:
 - what should happen next?
 - when should it happen?
 - how will progress be measured?
+
+### AI Incident Response and Board Escalation
+
+AI governance should include incident response, not only acceptable-use policies. Organizations should define what qualifies as an AI incident, including sensitive data exposure, unauthorized model behavior, unsafe outputs, model/provider compromise, prompt injection, loss of human oversight, material hallucination in high-risk workflows, or uncontrolled AI system behavior.
+
+Management should define escalation paths for security, legal, compliance, executive leadership, and the board. Boards should receive clear reporting on material AI incidents, remediation status, control gaps, and lessons learned.
+
+This is governance readiness guidance, not legal advice. Reporting obligations vary by jurisdiction, company role, system type, and incident type. Legal and compliance counsel should confirm applicable obligations.
 
 ## Board Summary Generator
 
@@ -294,6 +302,8 @@ Confidence uses high/medium/low based on citation quantity and evidence spread.
 Outputs include executive summary, overall readiness, top gaps, findings by CRA category, missing evidence, management questions, board discussion points, recommended actions, a 90-day readiness plan, limitations, and citations. The Streamlit UI can export the assessment as Markdown.
 
 This is a readiness assessment, not legal advice. Legal counsel should confirm applicability, product classification, conformity assessment pathway, and reporting obligations.
+
+AI incident response and escalation language in Executive AI Advisor is governance readiness guidance. It does not determine legal reporting obligations.
 
 ## 100-Day Technology Plan
 

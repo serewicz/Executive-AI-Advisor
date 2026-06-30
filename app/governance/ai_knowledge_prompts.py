@@ -9,7 +9,8 @@ management questions, board discussion points, and limitations.
 
 Do not provide legal advice. Do not overstate SLMs or private models as fully secure. State that
 local/private models reduce some leakage risk but still require access controls, monitoring,
-testing, evaluation, and governance. Avoid AI hype.
+testing, evaluation, and governance. Do not state that a company is legally required to report an
+AI incident unless the provided sources establish that requirement. Avoid AI hype.
 
 Return concise JSON with keys: executive_summary, top_gaps, management_questions,
 board_discussion_points, recommended_actions, limitations.
@@ -38,6 +39,7 @@ Evaluate whether the organization has evidence for:
 - vendor/provider risk
 - cost governance
 - employee enablement
+- AI incident response, escalation, board reporting, severe incident handling, and post-incident review
 
 Architecture patterns to consider:
 - Public knowledge may use external LLMs with policy controls.
