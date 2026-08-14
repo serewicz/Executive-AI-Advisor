@@ -4,7 +4,7 @@ Executive AI Advisor is AI-powered executive decision support for technology dil
 
 # Executive Deliverables
 
-Executive AI Advisor turns uploaded company documents into four board-ready outputs:
+Executive AI Advisor turns uploaded company documents into board-ready outputs:
 
 ```mermaid
 flowchart TD
@@ -13,23 +13,43 @@ flowchart TD
   B --> D["Board Brief<br/>risks, decisions, management questions"]
   B --> E["100-Day Technology Plan<br/>growth, integration, turnaround"]
   B --> F["AI Governance Assessment<br/>maturity, controls, auditability"]
+  B --> G["AI Replicability Risk<br/>defensibility vs easy replication"]
+  B --> H["CRA Readiness<br/>EU Cyber Resilience Act"]
 ```
 
-## Technology Risk Scorecard
+### Core deliverables
+
+#### Technology Risk Scorecard
 
 Executive technology risk assessment using red/yellow/green ratings, business impact, ownership, timelines, confidence levels, and success metrics.
 
-## Board Brief Generator
+#### Board Brief Generator
 
 Board-ready executive summaries including key risks, business impact, recommended decisions, management questions, confidence levels, and citations.
 
-## 100-Day Technology Plan
+#### 100-Day Technology Plan
 
 Structured plans for growth, transformation, acquisition integration, and technology turnaround scenarios.
 
-## AI Governance Assessment
+#### AI Governance Assessment
 
 Executive assessment of AI maturity, governance, privacy, security, auditability, vendor risk, and policy readiness.
+
+### Specialized assessments
+
+#### AI Replicability Risk Assessment
+
+Evaluates whether AI-enabled capabilities create durable competitive advantage or can be easily replicated by competitors. Covers proprietary data advantage, workflow and switching costs, knowledge advantage, operational maturity, and governance barriers.
+
+Outputs include overall replicability risk (red/yellow/green), evidence and missing evidence, management questions, board discussion points, recommendations, and a 90-day improvement plan.
+
+See [AI Replicability Risk Assessment](docs/AI-Replicability-Risk-Assessment.md).
+
+#### Cyber Resilience Act (CRA) Readiness Assessment
+
+EU Cyber Resilience Act-oriented readiness review for software and product companies. Produces deterministic findings, missing evidence, management questions, board discussion points, and a 90-day readiness plan.
+
+This is diligence and governance support only — not legal advice. Legal counsel should confirm applicability and obligations.
 
 # Example Executive Outputs
 
@@ -37,7 +57,8 @@ Executive assessment of AI maturity, governance, privacy, security, auditability
 - [Board Brief](examples/board-brief.md)
 - [100-Day Technology Plan](examples/100-day-technology-plan.md)
 - [AI Governance Assessment](examples/ai-governance-assessment.md)
-- [AI Replicability Risk Assessment](docs/AI-Replicability-Risk-Assessment.md): evaluates whether AI-enabled capabilities create durable competitive advantage or can be easily replicated by competitors.
+- [AI Replicability Risk Assessment](docs/AI-Replicability-Risk-Assessment.md) — defensibility of AI capabilities
+- Cyber Resilience Act (CRA) Readiness — generated from active investigations (see Current Capabilities and demo datasets)
 
 ## Who It Is For
 
@@ -54,6 +75,7 @@ Executive assessment of AI maturity, governance, privacy, security, auditability
 - Investigation workspaces that isolate each company, deal, or portfolio review
 - Cited outputs with confidence levels, limitations, owners, timelines, and measurable actions
 - AI governance, technology risk, board communication, and post-close planning workflows
+- AI replicability risk and Cyber Resilience Act (CRA) readiness assessments for defensibility and regulatory diligence
 - Local executive demo UI with Markdown exports and no raw JSON
 
 ## Current Capabilities
@@ -125,6 +147,7 @@ Open:
 - [Evaluation](docs/Evaluation.md)
 - [Governance](docs/Governance.md)
 - [AI Knowledge Governance Assessment](docs/AI-Knowledge-Governance-Assessment.md)
+- [AI Replicability Risk Assessment](docs/AI-Replicability-Risk-Assessment.md)
 - [Security](docs/Security.md)
 
 ## Development Workflow
