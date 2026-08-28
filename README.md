@@ -1,39 +1,45 @@
 # Executive AI Advisor
 
-Executive AI Advisor is AI-powered executive decision support for technology diligence, board briefs, risk scorecards, AI governance, and 100-day technology plans.
-
-# Executive Deliverables
-
-Executive AI Advisor turns uploaded company documents into board-ready outputs:
+Executive AI Advisor turns technical evidence into decisions boards, CEOs, and investors can act on. It produces cited risk assessments, board briefs, and 100-day plans while keeping confidence, limitations, and human judgment explicit.
 
 ```mermaid
-flowchart TD
-  A["Company documents<br/>diligence reports, assessments, board materials"] --> B["Executive AI Advisor<br/>evidence retrieval, citations, governance workflow"]
-  B --> C["Technology Risk Scorecard<br/>red/yellow/green risk, owners, timelines"]
-  B --> D["Board Brief<br/>risks, decisions, management questions"]
-  B --> E["100-Day Technology Plan<br/>growth, integration, turnaround"]
-  B --> F["AI Governance Assessment<br/>maturity, controls, auditability"]
-  B --> G["AI Replicability Risk<br/>defensibility vs easy replication"]
-  B --> H["CRA Readiness<br/>EU Cyber Resilience Act"]
+flowchart LR
+  A["Company evidence"] --> B["Cited technical findings"]
+  B --> C["Executive decision"]
+  C --> D["Accountable action"]
 ```
 
-### Core deliverables
+## Three Primary Outputs
 
-#### Technology Risk Scorecard
+### Technology Risk Scorecard
 
-Executive technology risk assessment using red/yellow/green ratings, business impact, ownership, timelines, confidence levels, and success metrics.
+Makes architecture, security, AI governance, cloud cost, delivery, technical debt, and key-person risks visible through ratings, business impact, citations, confidence, owners, timelines, and success measures.
 
-#### Board Brief Generator
+### Board Brief
 
-Board-ready executive summaries including key risks, business impact, recommended decisions, management questions, confidence levels, and citations.
+Turns technical findings into the decisions, management questions, limitations, and evidence a board needs for oversight without pulling directors into technology operations.
 
-#### 100-Day Technology Plan
+### 100-Day Technology Plan
 
-Structured plans for growth, transformation, acquisition integration, and technology turnaround scenarios.
+Converts findings into sequenced 30/60/90-day action, accountable owners, measurable outcomes, dependencies, and board checkpoints for growth, integration, or turnaround.
 
-#### AI Governance Assessment
+## SampleCo: Evidence to Decision
 
-Executive assessment of AI maturity, governance, privacy, security, auditability, vendor risk, and policy readiness.
+SampleCo appears investable, but its evidence shows incomplete security governance, concentrated key-person dependency, limited cloud-cost visibility, technical debt that reduces delivery predictability, and no formal AI governance model.
+
+The correct recommendation is not to stop growth. The board should require management to establish ownership, close evidence gaps, and report progress through a measurable 30/60/90-day plan. Executive AI Advisor makes the reasoning inspectable and turns each finding into a decision, owner, timeline, success measure, and board question.
+
+## Start Here
+
+- [Executive case study](https://github.com/serewicz/serewicz/blob/main/case-studies/executive-ai-advisor.md)
+- [From Architecture to Executive Value](docs/From-Architecture-to-Executive-Value.md)
+- [Demo Script](docs/DemoScript.md)
+- [Quick Start](docs/QuickStart.md)
+- [Example Board Brief](examples/board-brief.md)
+
+## Executive Deliverables and Assessments
+
+Beyond the three primary outputs, the platform includes AI governance, AI knowledge governance, AI replicability risk, Cyber Resilience Act readiness, diligence reporting, and cited executive question-answering. These modules reuse the same investigation isolation, retrieval, citation, structured-output, and evaluation pipeline.
 
 ### Specialized assessments
 
@@ -142,6 +148,7 @@ Open:
 - [Exact Demo Tutorial](docs/ExactDemoTutorial.md)
 - [User Guide](docs/UserGuide.md)
 - [Architecture](docs/Architecture.md)
+- [From Architecture to Executive Value](docs/From-Architecture-to-Executive-Value.md)
 - [Developer Guide](docs/DeveloperGuide.md)
 - [Demo Script](docs/DemoScript.md)
 - [Evaluation](docs/Evaluation.md)
