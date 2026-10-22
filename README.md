@@ -113,6 +113,83 @@ For a step-by-step executive demo, use:
 
 [Exact Demo Tutorial](docs/ExactDemoTutorial.md)
 
+## MCP Server
+
+Executive AI Advisor ships a [Model Context Protocol](https://modelcontextprotocol.io) server, so AI assistants such as Claude Desktop and Cursor can use its cited, evidence-based analysis as tools. The server is a thin adapter over the same service layer the REST API and Streamlit UI use, so outputs, citations, and guardrails are identical across all three.
+
+### Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `list_investigations` | List investigation workspaces (document sets) and document counts |
+| `search_evidence` | Semantic search over ingested evidence; returns cited excerpts without calling an LLM |
+| `ask_advisor` | Answer an executive question with citations, confidence, and limitations |
+| `board_summary` | Cited board memo for a document or investigation |
+| `technology_risk_scorecard` | Red/yellow/green technology risk ratings with owners and timelines |
+| `board_brief` | Board brief: top five risks, decisions needed, questions for management |
+| `hundred_day_plan` | 30/60/90-day plan for growth equity, acquisition integration, or turnaround |
+| `technology_due_diligence_report` | Full diligence report with risk heatmap and optional 100-day plan |
+| `ai_governance_assessment` | AI governance maturity assessment |
+| `ai_replicability_risk_assessment` | Whether AI capabilities are defensible or easily replicated |
+| `ai_knowledge_governance_assessment` | Governance of the knowledge and data assets AI depends on |
+| `cra_readiness_assessment` | EU Cyber Resilience Act readiness (not legal advice) |
+
+All tools are read-only, return structured output with a JSON schema, and validate inputs. Provider API keys are never accepted as tool arguments; configure them through environment variables so they stay out of model context.
+
+The server also exposes resources (`eaia://investigations` and `eaia://investigations/{document_set_id}`) and two guided prompts (`board_meeting_prep`, `diligence_review`).
+
+### Run it
+
+The server needs the same database and environment as the API (see [Quick Start](docs/QuickStart.md)).
+
+```bash
+# stdio, for desktop clients
+python -m app.mcp_server
+
+# streamable HTTP at http://127.0.0.1:8765/mcp
+python -m app.mcp_server --transport streamable-http --port 8765
+```
+
+Inspect it interactively with the MCP Inspector: `npx @modelcontextprotocol/inspector python -m app.mcp_server`.
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
+
+```json
+{
+  "mcpServers": {
+    "executive-ai-advisor": {
+      "command": "/path/to/Executive-AI-Advisor/.venv/bin/python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "/path/to/Executive-AI-Advisor",
+      "env": {
+        "DATABASE_URL": "postgresql+psycopg://executive_ai:change_me_in_local_development@localhost:5432/executive_ai_advisor",
+        "LLM_PROVIDER": "mock"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project, or `~/.cursor/mcp.json` globally. Use the same stdio entry as above, or point Cursor at a running HTTP server:
+
+```json
+{
+  "mcpServers": {
+    "executive-ai-advisor": {
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+```
+
+The HTTP transport binds to `127.0.0.1` by default and has no authentication. Keep it on localhost or put it behind an authenticating proxy before exposing it on a network.
+
+Try asking: "List my investigations, then build a board brief for SampleCo and tell me which risks need a decision this quarter."
+
 ## Security Notice
 
 Executive AI Advisor is currently safe for a local executive demo on your own machine. It is not ready to expose publicly. Before hosting it on a shared network or public URL, add authentication, lock down the database port, set `APP_DEBUG=false`, run Uvicorn without `--reload`, and protect or disable public API docs.
