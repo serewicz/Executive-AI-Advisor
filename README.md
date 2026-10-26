@@ -186,7 +186,15 @@ Add to `.cursor/mcp.json` in your project, or `~/.cursor/mcp.json` globally. Use
 }
 ```
 
-The HTTP transport binds to `127.0.0.1` by default and has no authentication. Keep it on localhost or put it behind an authenticating proxy before exposing it on a network.
+### Security controls
+
+- **Authentication (HTTP).** Set `MCP_AUTH_TOKENS` to require a bearer token. Generate one with `python -m app.mcp_server.tokens <label>`. Without tokens the server starts only on loopback; a non-loopback `--host` exits with an error unless `MCP_ALLOW_INSECURE_BIND=true`. Clients send `Authorization: Bearer <token>`; in Cursor, add `"headers": {"Authorization": "Bearer <token>"}` next to `url`.
+- **Model allowlist.** LLM tools accept only the provider and model pairs in `config/models.yaml` (copy `config/models.example.yaml`). With no file, only the models set in your environment are allowed.
+- **Rate limits.** Per client: 60 read calls a minute; 10 model calls a minute and 200 a day. Tune with `MCP_RATE_LIMIT_*`.
+- **Errors.** Clients see a short message and a reference ID. Details stay in the server log under the same ID.
+- **Audit log.** Every tool call, resource read, and prompt is recorded in the append-only `mcp_audit_events` table. Free-text questions are stored as a hash unless `MCP_AUDIT_STORE_TEXT=true`.
+
+Operations, token rotation, and audit queries: [MCP operations runbook](docs/runbooks/mcp-operations.md). Design: [ADR 0001](docs/adr/0001-mcp-hardening-and-audit-log.md).
 
 Try asking: "List my investigations, then build a board brief for SampleCo and tell me which risks need a decision this quarter."
 

@@ -43,6 +43,24 @@ Generated reports and Markdown exports include provider and model metadata, gene
 
 CRA Readiness Assessment is a diligence and governance readiness workflow. It is not legal advice and does not certify compliance. Legal counsel should confirm applicability, product classification, conformity assessment pathway, and reporting obligations before leadership relies on CRA-related conclusions.
 
+## MCP Server
+
+The MCP server (`python -m app.mcp_server`) exposes read-only tools, some of which call paid model APIs. Controls, per [ADR 0001](adr/0001-mcp-hardening-and-audit-log.md):
+
+| Threat | Control |
+|---|---|
+| Network caller reaches tools on an exposed HTTP port | Refuses to start on a non-loopback host without `MCP_AUTH_TOKENS`; bearer auth returns 401 for missing or wrong tokens |
+| Token theft | Only SHA-256 hashes are configured; one label per client; revoke by removing the entry; audit shows each use |
+| Cost abuse | Provider/model allowlist (`config/models.yaml`); per-client rate limits on model calls |
+| Disclosure through errors | Clients get fixed messages and a reference ID; detail stays in server logs |
+| Prompt injection in documents | Tools are read-only; no write or network tools; every call is audited |
+| Sensitive text in the audit log | `query`, `question`, `meeting_focus` stored as hash and length by default |
+| Audit tampering | Triggers block UPDATE, DELETE, TRUNCATE; run the server as a non-owner role for stronger protection |
+
+Configuration and procedures: [MCP operations runbook](runbooks/mcp-operations.md).
+
+Known limits: rate limits are in memory per process; audit writes fail open with an ERROR log; the model allowlist applies to MCP, not yet to the REST API or Streamlit UI.
+
 ## AI Incident Response and Board Escalation
 
 AI governance should include incident response, not only acceptable-use policies. Organizations should define what qualifies as an AI incident, including sensitive data exposure, unauthorized model behavior, unsafe outputs, model/provider compromise, prompt injection, loss of human oversight, material hallucination in high-risk workflows, or uncontrolled AI system behavior.
