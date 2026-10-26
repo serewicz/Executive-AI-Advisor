@@ -186,9 +186,18 @@ def test_entry_point_selects_transport(monkeypatch):
         def run(self, transport, **kwargs):
             calls.append((transport, kwargs))
 
-    monkeypatch.setattr("app.mcp_server.__main__.create_server", lambda: StubServer())
+    created = []
+
+    def fake_create_server(**kwargs):
+        created.append(kwargs)
+        return StubServer()
+
+    monkeypatch.setattr("app.mcp_server.__main__.create_server", fake_create_server)
 
     main([])
     main(["--transport", "streamable-http", "--port", "9000"])
 
     assert calls == [("stdio", {}), ("streamable-http", {"host": "127.0.0.1", "port": 9000})]
+    assert created[0]["transport"] == "stdio"
+    assert created[1]["transport"] == "http"
+    assert created[1]["token_verifier"] is None

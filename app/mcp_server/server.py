@@ -8,17 +8,27 @@ API, the Streamlit UI, and MCP clients such as Claude Desktop or Cursor.
 Provider API keys are never accepted as tool arguments. Configure providers
 through environment variables (see ``.env.example``) so keys stay out of
 model context and client logs.
+
+Every call goes through ``CallGuard``, which applies the rate limit and model
+allowlist, converts exceptions to client-safe messages, and writes one audit
+record. See docs/adr/0001-mcp-hardening-and-audit-log.md.
 """
 
 from __future__ import annotations
 
+import getpass
+import logging
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Annotated, Any, TypeVar
-from uuid import UUID
+from typing import Annotated, Any, Literal, TypeVar
+from uuid import UUID, uuid4
 
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.provider import TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
-from mcp.server.mcpserver.exceptions import ResourceNotFoundError, ToolError
+from mcp.server.mcpserver.exceptions import ResourceError, ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -31,10 +41,10 @@ from app.advisor.schemas import (
     LLMProviderName,
     SummaryType,
 )
-from app.api.routes.document_sets import _document_set_detail, list_document_sets
 from app.compliance import cra_service
 from app.compliance.cra_schemas import CRAReadinessResponse
-from app.core.config import settings
+from app.core.config import Settings, settings
+from app.core.errors import Denied, Internal, InvalidInput, NotFound, ProviderUnavailable, PublicError, RateLimited
 from app.diligence import service as diligence_service
 from app.diligence.schemas import TechnologyDiligenceReport
 from app.executive import service as executive_service
@@ -46,13 +56,20 @@ from app.executive.schemas import (
 )
 from app.governance import ai_knowledge_service
 from app.governance.ai_knowledge_schemas import AIKnowledgeGovernanceResponse
-from app.models.document import DocumentSet
+from app.ingestion.embeddings.base import EmbeddingError
+from app.mcp_server.audit import AuditRecord, AuditSink, DatabaseAuditSink, FailOpenAuditSink, redact_arguments
+from app.mcp_server.model_policy import ModelPolicy, load_model_policy
+from app.mcp_server.rate_limit import LimitPolicy, RateLimiter
 from app.planning.schemas import HundredDayPlanResponse, PlanType
 from app.retrieval import vector_search
 from app.schemas.document_set import DocumentSetListResponse
+from app.services import document_sets as document_set_service
 
 SessionFactory = Callable[[], Session]
 T = TypeVar("T")
+Transport = Literal["stdio", "http"]
+
+logger = logging.getLogger("eaia.mcp")
 
 SERVER_INSTRUCTIONS = """\
 Executive AI Advisor turns technical evidence into cited, board-ready decisions.
@@ -81,17 +98,129 @@ Provider = Annotated[
 ]
 Model = Annotated[str | None, Field(max_length=120, description="Optional model name override for the provider.")]
 
-_EXPECTED_ERRORS: tuple[type[Exception], ...] = (
+# Domain errors whose messages are string literals in this codebase. Their text
+# is safe to return. tests/test_mcp_hardening.py enforces the literal rule.
+_NOT_FOUND_ERRORS: tuple[type[Exception], ...] = (
     advisor_service.AdvisorDocumentNotFoundError,
-    advisor_service.AdvisorValidationError,
+    diligence_service.DiligenceDocumentNotFoundError,
     diligence_service.DiligenceDocumentSetNotFoundError,
-    diligence_service.DiligenceValidationError,
     cra_service.CRADocumentSetNotFoundError,
     ai_knowledge_service.AIKnowledgeGovernanceDocumentSetNotFoundError,
-    LLMError,
-    ValueError,
-    RuntimeError,
 )
+_VALIDATION_ERRORS: tuple[type[Exception], ...] = (
+    advisor_service.AdvisorValidationError,
+    diligence_service.DiligenceValidationError,
+    cra_service.CRAValidationError,
+    ai_knowledge_service.AIKnowledgeGovernanceValidationError,
+)
+# Errors that can carry upstream text (provider responses, driver messages).
+_PROVIDER_ERRORS: tuple[type[Exception], ...] = (LLMError, EmbeddingError)
+
+READ_POLICY = "read"
+LLM_POLICY = "llm"
+
+
+def to_public_error(exc: Exception, correlation_id: UUID) -> PublicError:
+    """Map any exception to a client-safe error. Unknown exceptions never expose their text."""
+    if isinstance(exc, PublicError):
+        exc.correlation_id = exc.correlation_id or correlation_id
+        return exc
+    if isinstance(exc, _NOT_FOUND_ERRORS):
+        return NotFound(str(exc))
+    if isinstance(exc, _VALIDATION_ERRORS):
+        return InvalidInput(str(exc))
+    if isinstance(exc, _PROVIDER_ERRORS):
+        return ProviderUnavailable("The model provider request failed.", correlation_id)
+    return Internal("Internal error.", correlation_id)
+
+
+def default_model_for(provider: str, config: Settings) -> str:
+    return {
+        "mock": "mock",
+        "openai": config.openai_chat_model,
+        "anthropic": config.anthropic_chat_model,
+        "grok": config.xai_chat_model,
+    }.get(provider, "")
+
+
+class CallGuard:
+    """Applies rate limits and the model allowlist, maps errors, and audits every call."""
+
+    def __init__(
+        self,
+        *,
+        transport: Transport,
+        audit_sink: AuditSink,
+        rate_limiter: RateLimiter,
+        model_policy: ModelPolicy,
+        config: Settings,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.transport = transport
+        self.audit_sink = audit_sink
+        self.rate_limiter = rate_limiter
+        self.model_policy = model_policy
+        self.config = config
+        self._clock = clock
+
+    def client_id(self) -> str:
+        token = get_access_token()
+        if token is not None:
+            return token.client_id
+        if self.transport == "stdio":
+            return f"stdio:{getpass.getuser()}"
+        return "http:unauthenticated-local"
+
+    def call(
+        self,
+        *,
+        kind: str,
+        name: str,
+        arguments: dict[str, Any],
+        operation: Callable[[], T],
+        policy: str,
+        uses_model: bool = False,
+    ) -> T:
+        correlation_id = uuid4()
+        client_id = self.client_id()
+        started = self._clock()
+        record = AuditRecord(
+            correlation_id=correlation_id,
+            client_id=client_id,
+            transport=self.transport,
+            kind=kind,
+            name=name,
+            arguments=redact_arguments(arguments, self.config.mcp_audit_store_text),
+            document_set_id=arguments.get("document_set_id"),
+        )
+        try:
+            decision = self.rate_limiter.check(client_id, policy)
+            if not decision.allowed:
+                record.outcome = "rate_limited"
+                raise RateLimited(decision.retry_after_seconds)
+            if uses_model:
+                provider = (arguments.get("llm_provider") or self.config.llm_provider or "mock").lower().strip()
+                model = arguments.get("llm_model") or default_model_for(provider, self.config)
+                record.provider, record.model = provider, model
+                if not self.model_policy.is_allowed(provider, model):
+                    record.outcome = "denied"
+                    raise Denied("Model not allowed for this provider.")
+            result = operation()
+        except Exception as exc:  # noqa: BLE001 - every failure is mapped and audited
+            public = to_public_error(exc, correlation_id)
+            if record.outcome == "ok":
+                record.outcome = "error"
+            record.error_class = type(exc).__name__
+            if isinstance(public, (Internal, ProviderUnavailable)):
+                logger.exception("MCP %s %s failed. correlation_id=%s", kind, name, correlation_id)
+            self._finish(record, started)
+            raise ToolError(public.client_text()) from None
+        self._finish(record, started)
+        return result
+
+    def _finish(self, record: AuditRecord, started: float) -> None:
+        record.duration_ms = int((self._clock() - started) * 1000)
+        self.audit_sink.write(record)
 
 
 class EvidenceHit(BaseModel):
@@ -111,16 +240,46 @@ class EvidenceSearchResult(BaseModel):
     results: list[EvidenceHit]
 
 
-def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
+def create_server(
+    session_factory: SessionFactory | None = None,
+    *,
+    transport: Transport = "stdio",
+    audit_sink: AuditSink | None = None,
+    rate_limiter: RateLimiter | None = None,
+    model_policy: ModelPolicy | None = None,
+    token_verifier: TokenVerifier | None = None,
+    public_url: str | None = None,
+    config: Settings | None = None,
+) -> MCPServer:
     """Build the Executive AI Advisor MCP server.
 
     ``session_factory`` returns a SQLAlchemy session; it defaults to the app's
-    configured ``SessionLocal`` and is injectable for tests.
+    configured ``SessionLocal``. The other arguments are injectable for tests.
+    ``token_verifier`` enables bearer authentication on HTTP transport;
+    ``public_url`` is the URL clients use to reach the server.
     """
+    config = config or settings
     if session_factory is None:
         from app.db.session import SessionLocal
 
         session_factory = SessionLocal
+
+    guard = CallGuard(
+        transport=transport,
+        audit_sink=FailOpenAuditSink(audit_sink or DatabaseAuditSink(session_factory)),
+        rate_limiter=rate_limiter
+        or RateLimiter(
+            {
+                READ_POLICY: LimitPolicy(per_minute=config.mcp_rate_limit_read_per_minute),
+                LLM_POLICY: LimitPolicy(
+                    per_minute=config.mcp_rate_limit_llm_per_minute,
+                    per_day=config.mcp_rate_limit_llm_per_day,
+                ),
+            }
+        ),
+        model_policy=model_policy or load_model_policy(config),
+        config=config,
+    )
 
     @contextmanager
     def db_session() -> Iterator[Session]:
@@ -130,26 +289,53 @@ def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
         finally:
             session.close()
 
-    def run(operation: Callable[[Session], T]) -> T:
-        with db_session() as db:
-            try:
+    def guarded(name: str, arguments: dict[str, Any], operation: Callable[[Session], T], *, uses_model: bool) -> T:
+        def _run() -> T:
+            with db_session() as db:
                 return operation(db)
-            except _EXPECTED_ERRORS as exc:
-                raise ToolError(str(exc)) from exc
+
+        return guard.call(
+            kind="tool",
+            name=name,
+            arguments=arguments,
+            operation=_run,
+            policy=LLM_POLICY if uses_model else READ_POLICY,
+            uses_model=uses_model,
+        )
+
+    def run(name: str, arguments: dict[str, Any], operation: Callable[[Session], T]) -> T:
+        return guarded(name, arguments, operation, uses_model=False)
+
+    def run_llm(name: str, arguments: dict[str, Any], operation: Callable[[Session], T]) -> T:
+        return guarded(name, arguments, operation, uses_model=True)
+
+    auth_kwargs: dict[str, Any] = {}
+    if token_verifier is not None:
+        resource_url = public_url or "http://127.0.0.1:8765"
+        auth_kwargs = {
+            "token_verifier": token_verifier,
+            "auth": AuthSettings(
+                issuer_url=resource_url,
+                resource_server_url=resource_url,
+                validate_token_resource=False,
+            ),
+        }
 
     mcp = MCPServer(
         name="executive-ai-advisor",
         title=settings.app_name,
         instructions=SERVER_INSTRUCTIONS,
         website_url="https://github.com/serewicz/Executive-AI-Advisor",
+        **auth_kwargs,
     )
+    mcp.call_guard = guard  # exposed for tests and operators; not part of the MCP surface
 
     # ------------------------------------------------------------------ tools
 
     @mcp.tool(title="List investigations", annotations=READ_ONLY)
     def list_investigations() -> DocumentSetListResponse:
         """List investigation workspaces (document sets) with their document counts."""
-        return run(list_document_sets)
+        return run("list_investigations", {}, document_set_service.list_document_sets)
 
     @mcp.tool(title="Search evidence", annotations=READ_ONLY)
     def search_evidence(
@@ -182,7 +368,11 @@ def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
                 ],
             )
 
-        return run(_search)
+        return run(
+            "search_evidence",
+            {"query": query, "document_set_id": document_set_id, "document_id": document_id, "top_k": top_k},
+            _search,
+        )
 
     @mcp.tool(title="Ask the advisor", annotations=READ_ONLY_LLM)
     def ask_advisor(
@@ -194,7 +384,16 @@ def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
         llm_model: Model = None,
     ) -> AdvisorAskResponse:
         """Answer an executive question with cited evidence, confidence, and stated limitations."""
-        return run(
+        return run_llm(
+            "ask_advisor",
+            {
+                "question": question,
+                "document_set_id": document_set_id,
+                "document_id": document_id,
+                "top_k": top_k,
+                "llm_provider": llm_provider,
+                "llm_model": llm_model,
+            },
             lambda db: advisor_service.answer_executive_question(
                 question=question,
                 db=db,
@@ -216,7 +415,16 @@ def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
         llm_model: Model = None,
     ) -> BoardSummaryResponse:
         """Generate a cited board memo for a document or investigation."""
-        return run(
+        return run_llm(
+            "board_summary",
+            {
+                "summary_type": summary_type,
+                "document_set_id": document_set_id,
+                "document_id": document_id,
+                "top_k": top_k,
+                "llm_provider": llm_provider,
+                "llm_model": llm_model,
+            },
             lambda db: advisor_service.generate_board_summary(
                 document_id=document_id,
                 document_set_id=document_set_id,
@@ -237,7 +445,14 @@ def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
             llm_provider: Provider = None,
             llm_model: Model = None,
         ):
-            return run(
+            return run_llm(
+                name,
+                {
+                    "document_set_id": document_set_id,
+                    "top_k": top_k,
+                    "llm_provider": llm_provider,
+                    "llm_model": llm_model,
+                },
                 lambda db: func(
                     document_set_id=document_set_id,
                     db=db,
@@ -306,7 +521,15 @@ def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
         llm_model: Model = None,
     ) -> TechnologyDiligenceReport:
         """Full technology due diligence report with findings, risk heatmap, and optional 100-day plan."""
-        return run(
+        return run_llm(
+            "technology_due_diligence_report",
+            {
+                "document_set_id": document_set_id,
+                "top_k": top_k,
+                "include_100_day_plan": include_100_day_plan,
+                "llm_provider": llm_provider,
+                "llm_model": llm_model,
+            },
             lambda db: diligence_service.generate_technology_due_diligence_report(
                 document_set_id=document_set_id,
                 db=db,
@@ -325,7 +548,14 @@ def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
         llm_model: Model = None,
     ) -> HundredDayPlanResponse:
         """Sequenced 30/60/90-day plan with owners, outcomes, dependencies, and board checkpoints."""
-        return run(
+        return run_llm(
+            "hundred_day_plan",
+            {
+                "document_set_id": document_set_id,
+                "plan_type": plan_type,
+                "llm_provider": llm_provider,
+                "llm_model": llm_model,
+            },
             lambda db: executive_service.generate_executive_100_day_plan(
                 document_set_id=document_set_id,
                 plan_type=plan_type,
@@ -337,45 +567,73 @@ def create_server(session_factory: SessionFactory | None = None) -> MCPServer:
 
     # -------------------------------------------------------------- resources
 
+    def audited_resource(name: str, arguments: dict[str, Any], operation: Callable[[], str]) -> str:
+        try:
+            return guard.call(kind="resource", name=name, arguments=arguments, operation=operation, policy=READ_POLICY)
+        except ToolError as exc:
+            # Resources report errors through the resource error type, not ToolError.
+            raise ResourceError(str(exc)) from None
+
     @mcp.resource("eaia://investigations", name="investigations", mime_type="application/json")
     def investigations_resource() -> str:
         """All investigation workspaces with document counts."""
-        with db_session() as db:
-            return list_document_sets(db).model_dump_json(indent=2)
+
+        def _read() -> str:
+            with db_session() as db:
+                return document_set_service.list_document_sets(db).model_dump_json(indent=2)
+
+        return audited_resource("eaia://investigations", {}, _read)
 
     @mcp.resource("eaia://investigations/{document_set_id}", name="investigation", mime_type="application/json")
     def investigation_resource(document_set_id: str) -> str:
         """One investigation workspace and its documents."""
-        with db_session() as db:
+
+        def _read() -> str:
             try:
-                document_set = db.get(DocumentSet, UUID(document_set_id))
-            except ValueError as exc:
-                raise ResourceNotFoundError(f"Invalid investigation id: {document_set_id}") from exc
-            if document_set is None:
-                raise ResourceNotFoundError(f"Investigation not found: {document_set_id}")
-            return _document_set_detail(document_set, db).model_dump_json(indent=2)
+                set_id = UUID(document_set_id)
+            except ValueError:
+                raise InvalidInput("Invalid investigation id.") from None
+            with db_session() as db:
+                document_set = document_set_service.get_document_set(set_id, db)
+                if document_set is None:
+                    raise NotFound("Investigation not found.")
+                return document_set_service.document_set_detail(document_set, db).model_dump_json(indent=2)
+
+        return audited_resource("eaia://investigations/{document_set_id}", {"document_set_id": document_set_id}, _read)
 
     # ---------------------------------------------------------------- prompts
 
     @mcp.prompt(title="Prepare for a board meeting")
     def board_meeting_prep(document_set_id: str, meeting_focus: str = "technology risk") -> str:
         """Guide the assistant through building a board pre-read from one investigation."""
-        return (
+        return guard.call(
+            kind="prompt",
+            name="board_meeting_prep",
+            arguments={"document_set_id": document_set_id, "meeting_focus": meeting_focus},
+            policy=READ_POLICY,
+            operation=lambda: (
             f"Prepare a board pre-read on {meeting_focus} for investigation {document_set_id}.\n"
             "1. Call technology_risk_scorecard and board_brief for this investigation.\n"
             "2. Lead with the decisions the board must make, then the top risks and their business impact.\n"
             "3. Cite evidence for every claim and state confidence and limitations plainly.\n"
             "4. End with the questions directors should ask management."
+            ),
         )
 
     @mcp.prompt(title="Technology due diligence review")
     def diligence_review(document_set_id: str, deal_type: PlanType = "growth_equity") -> str:
         """Guide the assistant through an investor-grade technology diligence review."""
-        return (
+        return guard.call(
+            kind="prompt",
+            name="diligence_review",
+            arguments={"document_set_id": document_set_id, "deal_type": deal_type},
+            policy=READ_POLICY,
+            operation=lambda: (
             f"Run a technology due diligence review for investigation {document_set_id} ({deal_type}).\n"
             "1. Call technology_due_diligence_report, then hundred_day_plan with the same plan type.\n"
             "2. Separate findings supported by evidence from gaps that need management interviews.\n"
             "3. Summarize deal-relevant risks, value-creation levers, and the first 30 days of action."
+            ),
         )
 
     return mcp
