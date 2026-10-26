@@ -1,21 +1,20 @@
 # Model allowlist for MCP callers: the list of models this deployment may call.
 #
 # How to use: copy to config/models.yaml (or point MCP_MODEL_POLICY_FILE at your copy) and edit.
-# Step-by-step instructions, validation, and rollback:
+# Step-by-step instructions, including adding a local model, validation, and rollback:
 #   docs/runbooks/updating-model-list.md
 #
 # Rules the server enforces at startup (it refuses to start if any fails):
-#   - provider names must be one of: mock, openai, anthropic, grok
+#   - provider names must be one of: mock, openai, anthropic, grok, local
 #   - each provider needs at least one entry under `models`
+#   - providers.local.base_url, if set, must equal LOCAL_LLM_BASE_URL
 #
 # Rules the server enforces on every call:
 #   - a caller's llm_provider + llm_model pair must appear below, or the call is denied
 #     before any provider is contacted
 #   - when a caller omits llm_model, the provider's default from the environment
-#     (OPENAI_CHAT_MODEL, ANTHROPIC_CHAT_MODEL, XAI_CHAT_MODEL) is used,
-#     so that default must also be listed here. The shipped defaults gpt-4o-mini and
-#     claude-3-5-sonnet-latest are not in this list; set OPENAI_CHAT_MODEL and
-#     ANTHROPIC_CHAT_MODEL to a listed model when you copy this file.
+#     (OPENAI_CHAT_MODEL, ANTHROPIC_CHAT_MODEL, XAI_CHAT_MODEL, LOCAL_LLM_MODEL) is used,
+#     so that default must also be listed here
 #
 # Model IDs and dates below were checked against each provider's public model page on
 # 2026-10-25. Providers retire models on their own schedule. Re-check before relying on
@@ -34,7 +33,7 @@ providers:
   openai:
     models:
       - id: gpt-6-luna
-        notes: Lowest-cost current model.
+        notes: Lowest-cost current model. Suggested default for OPENAI_CHAT_MODEL.
       - id: gpt-6.1-sol
         notes: Mid-cost. Use for board briefs and diligence reports when luna output is thin.
       # - id: gpt-6-astra
@@ -55,3 +54,13 @@ providers:
         notes: Current xAI flagship as of 2026-10-25.
       - id: grok-4.3
         notes: Older model kept because XAI_CHAT_MODEL defaults to it.
+
+  # Local LLM or SLM through an OpenAI-compatible server (Ollama, llama.cpp server, vLLM).
+  # Set LLM_PROVIDER=local or pass llm_provider=local. Endpoint and default model come from
+  # LOCAL_LLM_BASE_URL and LOCAL_LLM_MODEL. base_url here pins the endpoint you approved.
+  local:
+    base_url: http://127.0.0.1:11434/v1
+    notes: Ollama default port. llama.cpp server is usually :8080/v1, vLLM :8000/v1.
+    models:
+      - id: llama3.2:3b
+        notes: Example small model. Use the exact name your server reports (Ollama - `ollama list`).

@@ -14,6 +14,10 @@ docs/runbooks/updating-model-list.md)::
         models:
           - id: gpt-6-luna
             notes: Low-cost default.
+      local:
+        base_url: http://127.0.0.1:11434/v1   # must match LOCAL_LLM_BASE_URL
+        models:
+          - id: llama3.2:3b
 
 The older ``allowed_models: [id, ...]`` form is still accepted.
 """
@@ -28,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from app.core.config import Settings
 
-KNOWN_PROVIDERS = ("mock", "openai", "anthropic", "grok")
+KNOWN_PROVIDERS = ("mock", "openai", "anthropic", "grok", "local")
 
 
 class ModelEntry(BaseModel):
@@ -41,6 +45,7 @@ class ProviderPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
     models: list[ModelEntry] = Field(default_factory=list)
     allowed_models: list[str] = Field(default_factory=list)  # older form, still accepted
+    base_url: str | None = None  # local provider only; pins the endpoint
     notes: str | None = None
 
     @model_validator(mode="after")
@@ -86,6 +91,7 @@ def policy_from_settings(settings: Settings) -> ModelPolicy:
             "openai": frozenset({settings.openai_chat_model}),
             "anthropic": frozenset({settings.anthropic_chat_model}),
             "grok": frozenset({settings.xai_chat_model}),
+            "local": frozenset({settings.local_llm_model}),
         },
         source="environment",
     )
@@ -103,6 +109,13 @@ def load_model_policy(settings: Settings, path: Path | None = None) -> ModelPoli
     unknown = sorted(set(parsed.providers) - set(KNOWN_PROVIDERS))
     if unknown:
         raise ModelPolicyError(f"Unknown providers in {path}: {', '.join(unknown)}")
+    local = parsed.providers.get("local")
+    if local is not None and local.base_url is not None:
+        if local.base_url.rstrip("/") != settings.local_llm_base_url.rstrip("/"):
+            raise ModelPolicyError(
+                f"{path}: providers.local.base_url does not match LOCAL_LLM_BASE_URL. "
+                "Update one so they agree; the file pins the approved endpoint."
+            )
     return ModelPolicy(
         allowed={name: frozenset(p.model_ids()) for name, p in parsed.providers.items()},
         source=str(path),
