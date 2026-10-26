@@ -533,7 +533,7 @@ def test_every_call_is_audited_once(monkeypatch):
     async def scenario(client):
         await client.call_tool("search_evidence", {"query": "who deploys?", "document_set_id": str(set_id)})
         await client.call_tool("ask_advisor", {"question": "x" * 10, "llm_provider": "openai", "llm_model": "nope"})
-        await client.get_prompt("board_meeting_prep", {"document_set_id": "abc"})
+        await client.get_prompt("board_meeting_prep", {"document_set_id": str(uuid4())})
         try:
             await client.read_resource(f"eaia://investigations/{uuid4()}")
         except BaseException:  # noqa: BLE001 - the error path is what is being audited
@@ -695,7 +695,7 @@ def test_resources_and_prompts_have_no_override(monkeypatch, tmp_path):
     async def scenario(client):
         prompt_error = resource_error = None
         try:
-            await client.get_prompt("board_meeting_prep", {"document_set_id": "abc"})
+            await client.get_prompt("board_meeting_prep", {"document_set_id": str(uuid4())})
         except BaseException as exc:  # noqa: BLE001
             prompt_error = str(exc)
         try:
@@ -767,3 +767,32 @@ def test_fallback_file_appends_and_never_truncates(tmp_path):
     lines = fallback_lines(fallback.path)
     assert [line["event"] for line in lines] == ["audit_refused", "unaudited_override"]
     assert oct(fallback.path.stat().st_mode & 0o777) == "0o600"
+
+
+@pytest.mark.parametrize("target", ["resource", "board_meeting_prep", "diligence_review"])
+def test_malformed_investigation_id_is_a_validation_error_not_an_audit_outage(target, tmp_path, caplog):
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    server, sink = build(fallback_audit=fallback)
+
+    async def scenario(client):
+        try:
+            if target == "resource":
+                await client.read_resource("eaia://investigations/not-a-uuid")
+            else:
+                await client.get_prompt(target, {"document_set_id": "not-a-uuid"})
+        except BaseException as exc:  # noqa: BLE001
+            return str(exc)
+        return None
+
+    with caplog.at_level(logging.ERROR, logger="eaia.mcp.audit"):
+        error = run_client(server, scenario)
+
+    assert error is not None
+    if target == "resource":
+        assert "Invalid investigation id." in error
+    assert "audit log" not in error
+    record = sink.records[-1]
+    assert (record.outcome, record.error_class, record.document_set_id) == ("error", "InvalidInput", None)
+    assert record.arguments["document_set_id"] == "not-a-uuid"
+    assert "Audit write failed" not in caplog.text
+    assert fallback_lines(fallback.path) == []

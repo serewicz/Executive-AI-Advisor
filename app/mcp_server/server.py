@@ -161,6 +161,13 @@ def default_model_for(provider: str, config: Settings) -> str:
     }.get(provider, "")
 
 
+def parse_document_set_id(value: Any) -> UUID | None:
+    """Return a UUID for the audit column, or raise ValueError for a malformed ID."""
+    if value is None or isinstance(value, UUID):
+        return value
+    return UUID(str(value))
+
+
 class CallGuard:
     """Applies rate limits and the model allowlist, maps errors, and audits every call."""
 
@@ -213,13 +220,21 @@ class CallGuard:
             kind=kind,
             name=name,
             arguments=redact_arguments(arguments, self.config.mcp_audit_store_text),
-            document_set_id=arguments.get("document_set_id"),
         )
+        # The audit column is a UUID. Parse here so a malformed ID is a validation error,
+        # not a failed audit insert that looks like an outage.
+        set_id_error: InvalidInput | None = None
+        try:
+            record.document_set_id = parse_document_set_id(arguments.get("document_set_id"))
+        except ValueError:
+            set_id_error = InvalidInput("Invalid investigation id.")
         if accept_unaudited:
             record.detail = "accept_unaudited requested"
         failure: PublicError | None = None
         result: Any = None
         try:
+            if set_id_error is not None:
+                raise set_id_error
             decision = self.rate_limiter.check(client_id, policy)
             if not decision.allowed:
                 record.outcome = "rate_limited"

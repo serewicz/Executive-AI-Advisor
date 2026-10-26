@@ -122,3 +122,36 @@ def test_real_database_failure_blocks_then_override_is_recorded(tmp_path):
     reference = override.meta["eaia/audit"]["reference"]
     with sessionmaker(bind=create_engine(URL))() as db:
         assert db.scalar(text("SELECT count(*) FROM mcp_audit_events WHERE correlation_id = :c"), {"c": reference}) == 0
+
+
+def test_malformed_investigation_id_is_audited_as_a_validation_error(session_factory, tmp_path):
+    """Before the fix, the raw string reached the UUID column and the insert failed (DataError)."""
+    from mcp import Client
+
+    from app.mcp_server.audit import FallbackAuditFile
+
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    server = create_server(session_factory, fallback_audit=fallback)
+
+    async def scenario():
+        async with Client(server) as client:
+            try:
+                await client.read_resource("eaia://investigations/not-a-uuid")
+            except BaseException as exc:  # noqa: BLE001
+                return str(exc)
+            return None
+
+    error = asyncio.run(scenario())
+    assert "Invalid investigation id." in error
+    assert not fallback.path.exists()
+    reference = error.rsplit("Reference: ", 1)[-1].strip() if "Reference: " in error else None
+    with session_factory() as db:
+        latest = db.scalars(
+            select(MCPAuditEvent)
+            .where(MCPAuditEvent.name == "eaia://investigations/{document_set_id}")
+            .order_by(MCPAuditEvent.occurred_at.desc())
+            .limit(1)
+        ).one()
+    assert (latest.outcome, latest.error_class, latest.document_set_id) == ("error", "InvalidInput", None)
+    assert latest.arguments["document_set_id"] == "not-a-uuid"
+    assert reference is None or str(latest.correlation_id) == reference
