@@ -85,7 +85,7 @@ Provider `local` sends chat requests to any server that speaks the OpenAI chat-c
    LOCAL_LLM_API_KEY=            # only if your server requires one
    ```
 
-4. Add or edit the `local` block in `config/models.yaml`. `base_url` must equal `LOCAL_LLM_BASE_URL` character for character, or the server does not start. This stops a changed environment variable from sending evidence to a host nobody reviewed.
+4. Add or edit the `local` block in `config/models.yaml`. `base_url` must equal `LOCAL_LLM_BASE_URL` (a trailing `/` is ignored), or the server does not start. If `LOCAL_LLM_BASE_URL` is set and the block has no `base_url`, the server does not start either. Always set both. This stops a changed environment variable from sending evidence to a host nobody reviewed.
 
    ```yaml
    local:
@@ -101,9 +101,9 @@ Provider `local` sends chat requests to any server that speaks the OpenAI chat-c
 
 Choosing a local model:
 
-- The advisor asks for JSON output. Pick a model that follows JSON-mode or structured-output instructions. Small models (1-3B parameters) often return malformed JSON for long prompts; the tool then returns an error.
+- The advisor asks for JSON output. Some OpenAI-compatible servers ignore `response_format`, and small models (1-3B parameters) often return malformed JSON on long prompts. The tool then returns an error with a reference ID, after the tokens are spent. Run one real `board_brief` call against each model before you list it.
 - Context length must fit the retrieved evidence plus the prompt. 8k tokens is a working minimum.
-- If the model server is on another host, use TLS or a private network. The advisor sends document excerpts to it.
+- The advisor sends retrieved document excerpts to `LOCAL_LLM_BASE_URL`. "Local" is the API style, not a guarantee of location. If the server is on another host, use TLS or a private network, and treat the host as holding your documents.
 
 ## Validate
 

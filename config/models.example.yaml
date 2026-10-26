@@ -8,6 +8,7 @@
 #   - provider names must be one of: mock, openai, anthropic, grok, local
 #   - each provider needs at least one entry under `models`
 #   - providers.local.base_url, if set, must equal LOCAL_LLM_BASE_URL
+#   - if LOCAL_LLM_BASE_URL is set, providers.local.base_url must be set (the pin)
 #
 # Rules the server enforces on every call:
 #   - a caller's llm_provider + llm_model pair must appear below, or the call is denied
@@ -33,18 +34,18 @@ providers:
   openai:
     models:
       - id: gpt-6-luna
-        notes: Lowest-cost current model. Suggested default for OPENAI_CHAT_MODEL.
+        notes: Lowest-cost current model. Pass llm_model=gpt-6-luna for ask_advisor and search summaries.
       - id: gpt-6.1-sol
-        notes: Mid-cost. Use for board briefs and diligence reports when luna output is thin.
+        notes: Mid-cost. Default for OPENAI_CHAT_MODEL; used for board briefs and diligence.
       # - id: gpt-6-astra
       #   notes: Highest cost (about 100x luna per token as of 2026-10-25). Enable on purpose.
 
   anthropic:
     models:
       - id: claude-haiku-5-5
-        notes: Lowest-cost current model.
+        notes: Lowest-cost current model. Pass llm_model=claude-haiku-5-5 for ask_advisor.
       - id: claude-sonnet-5-5
-        notes: Mid-cost.
+        notes: Mid-cost. Default for ANTHROPIC_CHAT_MODEL.
       # - id: claude-opus-5-5
       #   notes: Higher cost. Enable on purpose.
 

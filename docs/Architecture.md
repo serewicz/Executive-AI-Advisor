@@ -89,7 +89,7 @@ Optional OpenAI chat mode:
 
 - `LLM_PROVIDER=openai`
 - `OPENAI_API_KEY=...`
-- `OPENAI_CHAT_MODEL=gpt-6-luna`
+- `OPENAI_CHAT_MODEL=gpt-6.1-sol`
 
 The default local/mock configuration supports demos, tests, confidentiality, cost control, and environments where external API calls are not allowed.
 

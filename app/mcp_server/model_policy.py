@@ -97,9 +97,19 @@ def policy_from_settings(settings: Settings) -> ModelPolicy:
     )
 
 
+_UNPINNED = (
+    "LOCAL_LLM_BASE_URL is set but {where}. Add a local block with base_url equal to "
+    "LOCAL_LLM_BASE_URL to config/models.yaml, or unset LOCAL_LLM_BASE_URL. "
+    "See docs/runbooks/updating-model-list.md."
+)
+
+
 def load_model_policy(settings: Settings, path: Path | None = None) -> ModelPolicy:
     path = path or settings.mcp_model_policy_file
+    base_url_set = "local_llm_base_url" in settings.model_fields_set
     if not path.exists():
+        if base_url_set:
+            raise ModelPolicyError(_UNPINNED.format(where=f"{path} does not exist"))
         return policy_from_settings(settings)
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -110,6 +120,8 @@ def load_model_policy(settings: Settings, path: Path | None = None) -> ModelPoli
     if unknown:
         raise ModelPolicyError(f"Unknown providers in {path}: {', '.join(unknown)}")
     local = parsed.providers.get("local")
+    if base_url_set and (local is None or local.base_url is None):
+        raise ModelPolicyError(_UNPINNED.format(where=f"{path} has no providers.local.base_url"))
     if local is not None and local.base_url is not None:
         if local.base_url.rstrip("/") != settings.local_llm_base_url.rstrip("/"):
             raise ModelPolicyError(

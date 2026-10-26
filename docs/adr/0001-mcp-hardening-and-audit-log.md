@@ -81,7 +81,13 @@ The file is a list of current models, not only a list of names:
 - `python -m app.mcp_server.model_policy [path]` validates a file without starting the server and warns when a provider's environment default is missing from its list.
 - The procedure for changing the list is in `docs/runbooks/updating-model-list.md`.
 
-Local models. The ability to change vendors, or to run without one, is a design requirement: per-token prices and model availability are set by vendors and can change with little notice. A `local` provider talks to any OpenAI-compatible server (Ollama, llama.cpp server, vLLM) at `LOCAL_LLM_BASE_URL`. It reuses the OpenAI provider class and changes only the endpoint, key, and default model, so it adds about 25 lines. If the policy file sets `providers.local.base_url`, it must equal `LOCAL_LLM_BASE_URL` or the server refuses to start. This pins the endpoint an operator approved, so a changed environment variable cannot send evidence to a different host without a matching change to the reviewed file. Routing and fallback between providers stay in ADR 0002 (#24).
+Local models. The ability to change vendors, or to run without one, is a design requirement: per-token prices and model availability are set by vendors and can change with little notice. A `local` provider talks to any OpenAI-compatible server (Ollama, llama.cpp server, vLLM) at `LOCAL_LLM_BASE_URL`. It reuses the OpenAI provider class and changes only the endpoint, key, and default model, so it adds about 25 lines. If the policy file sets `providers.local.base_url`, it must equal `LOCAL_LLM_BASE_URL` or the server refuses to start. If `LOCAL_LLM_BASE_URL` is set and the file has no `providers.local.base_url` (or there is no file), the server also refuses to start. This pins the endpoint an operator approved, so a changed environment variable cannot send evidence to a different host without a matching change to the reviewed file. Routing and fallback between providers stay in ADR 0002 (#24).
+
+Local provider risks:
+- Outbound evidence path. The advisor sends retrieved document excerpts to `LOCAL_LLM_BASE_URL`. "Local" names the API style, not the location; the URL can point anywhere. Always pin `base_url` in `config/models.yaml`, and use loopback, a private network, or TLS.
+- JSON mode. The advisor asks for JSON output. Many small models and some OpenAI-compatible servers ignore `response_format` or return malformed JSON on long prompts. The tool then returns an error with a reference ID, and the tokens are spent. Test each model with a real board brief before listing it.
+
+Default models. `OPENAI_CHAT_MODEL` defaults to `gpt-6.1-sol` and `ANTHROPIC_CHAT_MODEL` to `claude-sonnet-5-5`, the mid tier, because board briefs and diligence reports are the main use. The config has one default per provider, not one per tool, so `ask_advisor` uses the same default. Callers who want the cheap tier pass `llm_model=gpt-6-luna` or `llm_model=claude-haiku-5-5`. Per-tool defaults belong in ADR 0002 routing.
 
 Alternatives considered for the local path:
 - *Point `OPENAI_BASE_URL` at the local server.* Works with no code, but replaces OpenAI rather than adding a provider, and the audit log would record `openai` for calls that never left the network. Rejected.
@@ -274,6 +280,7 @@ All seventeen are covered by tests in `tests/test_mcp_hardening.py` and `tests/t
 | Allowlist of model names | Dated model list with notes and a validation command | Makes the list easy to keep current |
 | SHA-256 of free text | HMAC-SHA256 with `MCP_AUDIT_HASH_KEY` | Plain hashes of short text can be guessed |
 | Local provider and new default models in this PR | Split to a separate draft PR | Review: keep this PR to hardening |
+| Cheap default models | Mid-tier defaults; cheap tier by `llm_model` | No per-tool defaults in config; board briefs and diligence need the stronger model |
 | Allowlist for the server | Allowlist for MCP only | Keeps this change inside the MCP layer; ADR 0002 moves it to the service layer |
 | `provider`/`model` filled by ADR 0002 | Filled now for LLM tools | The allowlist already resolves both |
 | Custom auth middleware implied | MCP SDK bearer middleware with a static verifier | Less code, standard 401 behavior, path to OAuth |
