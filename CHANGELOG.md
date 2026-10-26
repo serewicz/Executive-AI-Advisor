@@ -11,9 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Root `SECURITY.md` pointing to detailed security documentation
 - Populated project roadmap
 - Improved README visibility for AI Replicability and CRA assessments (see related PR)
+- MCP server (`python -m app.mcp_server`) exposing advisor tools, resources, and prompts over stdio and streamable HTTP
 
 ### Changed
 - Documentation and contribution hygiene updates
+
+### Security
+- Upgraded sentence-transformers, pypdf, python-multipart, docling, requests, streamlit, python-dotenv, pytest, and torch to patched releases
 
 ## [0.1.0] - 2026-08
 
