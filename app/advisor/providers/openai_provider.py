@@ -16,16 +16,6 @@ from app.core.config import settings
 
 class OpenAIChatProvider(LLMProvider):
     provider_name = "openai"
-    display_name = "OpenAI"
-
-    def _client(self, api_key_override: str | None) -> OpenAI:
-        api_key = api_key_override or settings.openai_api_key
-        if not api_key:
-            raise LLMError("OPENAI_API_KEY is required when LLM_PROVIDER=openai.")
-        return OpenAI(api_key=api_key)
-
-    def _default_model(self) -> str:
-        return settings.openai_chat_model
 
     def generate(
         self,
@@ -36,10 +26,14 @@ class OpenAIChatProvider(LLMProvider):
         api_key_override: str | None = None,
         model_override: str | None = None,
     ) -> str:
-        client = self._client(api_key_override)
+        api_key = api_key_override or settings.openai_api_key
+        if not api_key:
+            raise LLMError("OPENAI_API_KEY is required when LLM_PROVIDER=openai.")
+
+        client = OpenAI(api_key=api_key)
         try:
             response = client.chat.completions.create(
-                model=model_override or self._default_model(),
+                model=model_override or settings.openai_chat_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -49,13 +43,13 @@ class OpenAIChatProvider(LLMProvider):
                 max_tokens=max_tokens,
             )
         except OpenAIError as exc:
-            raise LLMError(f"{self.display_name} chat request failed: {exc}") from exc
+            raise LLMError(f"OpenAI chat request failed: {exc}") from exc
         except Exception as exc:
             raise LLMError(f"LLM generation failed: {exc}") from exc
 
         content = response.choices[0].message.content
         if not content:
-            raise LLMError(f"{self.display_name} chat response did not include content.")
+            raise LLMError("OpenAI chat response did not include content.")
         return content
 
     def answer_question(

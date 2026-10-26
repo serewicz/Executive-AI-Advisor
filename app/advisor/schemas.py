@@ -8,7 +8,7 @@ from app.schemas.document import DocumentClassification, DocumentSourceType
 
 
 Confidence = Literal["high", "medium", "low"]
-LLMProviderName = Literal["mock", "openai", "anthropic", "grok", "local"]
+LLMProviderName = Literal["mock", "openai", "anthropic", "grok"]
 SummaryType = Literal[
     "technology_risk",
     "diligence_summary",

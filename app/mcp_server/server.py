@@ -103,7 +103,7 @@ DocumentSetId = Annotated[UUID, Field(description="Investigation (document set) 
 TopK = Annotated[int, Field(ge=1, le=50, description="Number of evidence chunks to retrieve per query.")]
 Provider = Annotated[
     LLMProviderName | None,
-    Field(description="LLM provider override (mock, openai, anthropic, grok, local). Defaults to LLM_PROVIDER."),
+    Field(description="LLM provider override (mock, openai, anthropic, grok). Defaults to LLM_PROVIDER."),
 ]
 Model = Annotated[str | None, Field(max_length=120, description="Optional model name override for the provider.")]
 AcceptUnaudited = Annotated[
@@ -158,7 +158,6 @@ def default_model_for(provider: str, config: Settings) -> str:
         "openai": config.openai_chat_model,
         "anthropic": config.anthropic_chat_model,
         "grok": config.xai_chat_model,
-        "local": config.local_llm_model,
     }.get(provider, "")
 
 

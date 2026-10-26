@@ -15,8 +15,6 @@ Runbook for operators of the Executive AI Advisor MCP server. Design and reasons
 | `MCP_AUDIT_STORE_TEXT` | `false` | Store `query`, `question`, `meeting_focus` text in the audit log instead of a hash and length. |
 | `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE` | `true` | Allow `accept_unaudited=true` on tools when the audit table cannot be written. `false`: block with no override. |
 | `MCP_AUDIT_FALLBACK_FILE` | `data/audit/mcp_audit_fallback.jsonl` | Append-only file for overrides and refusals during an audit outage. |
-| `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:11434/v1` | OpenAI-compatible endpoint for provider `local`. |
-| `LOCAL_LLM_MODEL` | `llama3.2:3b` | Default model for provider `local`. |
 
 Restart the server after any change. Settings are read at startup.
 
@@ -192,7 +190,7 @@ cp config/models.example.yaml config/models.yaml
 python -m app.mcp_server.model_policy config/models.yaml
 ```
 
-The server refuses to start on an unknown provider, an empty list, an unknown key, invalid YAML, or a `local` `base_url` that does not match `LOCAL_LLM_BASE_URL`. A provider's default model (for example `OPENAI_CHAT_MODEL`) must be in its list, or calls that omit `llm_model` are denied; the check command warns about this. To add, retire, or localize models: [Updating the model list](updating-model-list.md).
+The server refuses to start on an unknown provider, an empty list, an unknown key, or invalid YAML. A provider's default model (for example `OPENAI_CHAT_MODEL`) must be in its list, or calls that omit `llm_model` are denied; the check command warns about this. To add or retire models: [Updating the model list](updating-model-list.md).
 
 ## Rate-limit tuning
 

@@ -3,7 +3,6 @@ from functools import lru_cache
 from app.advisor.providers.base import LLMError, LLMProvider
 from app.advisor.providers.anthropic_provider import AnthropicChatProvider
 from app.advisor.providers.grok_provider import GrokChatProvider
-from app.advisor.providers.local_provider import LocalChatProvider
 from app.advisor.providers.mock_provider import MockLLMProvider
 from app.advisor.providers.openai_provider import OpenAIChatProvider
 from app.core.config import settings
@@ -20,7 +19,5 @@ def get_llm_provider(provider_name: str | None = None) -> LLMProvider:
         return AnthropicChatProvider()
     if provider == "grok":
         return GrokChatProvider()
-    if provider == "local":
-        return LocalChatProvider()
 
-    raise LLMError(f"Unsupported LLM provider '{provider}'. Use 'mock', 'openai', 'anthropic', 'grok', or 'local'.")
+    raise LLMError(f"Unsupported LLM provider '{provider}'. Use 'mock', 'openai', 'anthropic', or 'grok'.")

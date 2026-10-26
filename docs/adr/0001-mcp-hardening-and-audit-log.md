@@ -2,7 +2,7 @@
 
 Status: Accepted, pending review. Tracking issue: #23. Order: 1 of 3. ADR 0002 (#24) and ADR 0003 (#25) build on it.
 
-Date: 2026-10-25. Revised 2026-10-25: audit failure changed from fail open to fail closed with an explicit override (section 6.1); the model allowlist became a dated model list with a local provider (section 2).
+Date: 2026-10-25. Revised 2026-10-25: audit failure changed from fail open to fail closed with an explicit override (section 6.1); the model allowlist became a dated model list (section 2).
 
 This record describes the design as built. Section "Changes from the draft" lists where the implementation differs from the version attached to #23.
 
@@ -59,10 +59,6 @@ providers:
     models:
       - id: gpt-6-luna
         notes: Lowest-cost current model.
-  local:
-    base_url: http://127.0.0.1:11434/v1
-    models:
-      - id: llama3.2:3b
 ```
 
 Every LLM-backed tool resolves the provider (argument or `LLM_PROVIDER`) and the model (argument or the provider's configured default), then checks the pair against the allowlist before any retrieval or provider call. Unknown pair → `Model not allowed for this provider.`, audited as `denied`. The default model must also be listed, so a config change cannot route around the list.
@@ -81,11 +77,7 @@ The file is a list of current models, not only a list of names:
 - `python -m app.mcp_server.model_policy [path]` validates a file without starting the server and warns when a provider's environment default is missing from its list.
 - The procedure for changing the list is in `docs/runbooks/updating-model-list.md`.
 
-Local models. The ability to change vendors, or to run without one, is a design requirement: per-token prices and model availability are set by vendors and can change with little notice. A `local` provider talks to any OpenAI-compatible server (Ollama, llama.cpp server, vLLM) at `LOCAL_LLM_BASE_URL`. It reuses the OpenAI provider class and changes only the endpoint, key, and default model, so it adds about 25 lines. If the policy file sets `providers.local.base_url`, it must equal `LOCAL_LLM_BASE_URL` or the server refuses to start. This pins the endpoint an operator approved, so a changed environment variable cannot send evidence to a different host without a matching change to the reviewed file. Routing and fallback between providers stay in ADR 0002 (#24).
-
-Alternatives considered for the local path:
-- *Point `OPENAI_BASE_URL` at the local server.* Works with no code, but replaces OpenAI rather than adding a provider, and the audit log would record `openai` for calls that never left the network. Rejected.
-- *A provider plugin system.* More than this change needs. Rejected until ADR 0002 shows a need.
+Local models and new default models were split out of this ADR's PR into a separate draft PR, so this change covers only hardening and the list format.
 
 Alternative: remove `llm_model` from MCP entirely. Rejected because model choice per task is a real need (cheap model for search summaries, stronger model for diligence); the fix is governance, not removal.
 
@@ -241,7 +233,7 @@ All twelve are covered by tests in `tests/test_mcp_hardening.py` and `tests/test
 |---|---|---|
 | Append-only through grants | Triggers, plus optional `INSERT, SELECT` role | The app role owns the table, so grants do not bind it |
 | Audit failure behavior unstated | Fail closed, with an explicit `accept_unaudited` override recorded in a fallback file | First built as fail open; changed after owner review (section 6.1) |
-| Allowlist of model names | Dated model list with notes, a `local` provider, and a validation command | Makes the list easy to keep current and keeps a no-vendor option |
+| Allowlist of model names | Dated model list with notes and a validation command | Makes the list easy to keep current |
 | Allowlist for the server | Allowlist for MCP only | Keeps this change inside the MCP layer; ADR 0002 moves it to the service layer |
 | `provider`/`model` filled by ADR 0002 | Filled now for LLM tools | The allowlist already resolves both |
 | Custom auth middleware implied | MCP SDK bearer middleware with a static verifier | Less code, standard 401 behavior, path to OAuth |

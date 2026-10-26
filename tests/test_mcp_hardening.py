@@ -335,7 +335,6 @@ def test_example_policy_file_is_valid():
     policy = load_model_policy(settings, ROOT / "config" / "models.example.yaml")
     assert policy.is_allowed("mock", "mock")
     assert policy.as_of == "2026-10-25"
-    assert policy.is_allowed("local", "llama3.2:3b")
     assert not policy.is_allowed("openai", "gpt-6-astra")  # commented out on purpose
 
 
@@ -355,7 +354,7 @@ def test_model_entries_with_notes(tmp_path):
     [
         "providers:\n  openai:\n    models: []\n",
         "providers:\n  openai:\n    models:\n      - id: x\n        price: 1\n",
-        "providers:\n  local:\n    base_url: http://10.0.0.5:8000/v1\n    models:\n      - id: x\n",
+        "providers:\n  local:\n    models:\n      - id: x\n",
     ],
 )
 def test_model_entries_reject_bad_input(tmp_path, content):
@@ -363,18 +362,6 @@ def test_model_entries_reject_bad_input(tmp_path, content):
     path.write_text(content)
     with pytest.raises(ModelPolicyError):
         load_model_policy(settings, path)
-
-
-def test_local_provider_is_routed_and_allowlisted(monkeypatch):
-    from app.advisor.providers.factory import get_llm_provider
-    from app.advisor.providers.local_provider import LocalChatProvider
-
-    get_llm_provider.cache_clear()
-    provider = get_llm_provider("local")
-    assert isinstance(provider, LocalChatProvider)
-    client = provider._client(None)
-    assert str(client.base_url).rstrip("/") == settings.local_llm_base_url.rstrip("/")
-    get_llm_provider.cache_clear()
 
 
 def test_policy_check_command(tmp_path, capsys):

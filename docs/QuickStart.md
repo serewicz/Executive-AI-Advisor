@@ -31,7 +31,7 @@ For the default local setup, no secrets are required. To enable OpenAI later, se
 ```bash
 LLM_PROVIDER=openai
 OPENAI_API_KEY=your_key_here
-OPENAI_CHAT_MODEL=gpt-6-luna
+OPENAI_CHAT_MODEL=gpt-4o-mini
 ```
 
 For OpenAI embeddings:
