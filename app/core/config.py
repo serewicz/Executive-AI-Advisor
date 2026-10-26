@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     max_embedding_text_chars: int = Field(default=12000, alias="MAX_EMBEDDING_TEXT_CHARS")
     max_search_query_chars: int = Field(default=2000, alias="MAX_SEARCH_QUERY_CHARS")
 
+    # MCP server (see docs/adr/0001-mcp-hardening-and-audit-log.md)
+    mcp_auth_tokens: str | None = Field(default=None, alias="MCP_AUTH_TOKENS")
+    mcp_allow_insecure_bind: bool = Field(default=False, alias="MCP_ALLOW_INSECURE_BIND")
+    mcp_model_policy_file: Path = Field(default=Path("config/models.yaml"), alias="MCP_MODEL_POLICY_FILE")
+    mcp_rate_limit_read_per_minute: int = Field(default=60, ge=1, alias="MCP_RATE_LIMIT_READ_PER_MINUTE")
+    mcp_rate_limit_llm_per_minute: int = Field(default=10, ge=1, alias="MCP_RATE_LIMIT_LLM_PER_MINUTE")
+    mcp_rate_limit_llm_per_day: int = Field(default=200, ge=1, alias="MCP_RATE_LIMIT_LLM_PER_DAY")
+    mcp_audit_store_text: bool = Field(default=False, alias="MCP_AUDIT_STORE_TEXT")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

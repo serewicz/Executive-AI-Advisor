@@ -1,0 +1,14 @@
+# Model allowlist for MCP callers. Copy to config/models.yaml and edit.
+# Callers may pass llm_provider and llm_model; any pair not listed here is rejected
+# before a provider is called. Omitting llm_model uses the provider's configured
+# default from the environment, which must also be listed here.
+# ADR 0002 extends this file with routes and fallback settings.
+providers:
+  mock:
+    allowed_models: [mock]
+  openai:
+    allowed_models: [gpt-4o-mini]
+  anthropic:
+    allowed_models: [claude-3-5-sonnet-latest]
+  grok:
+    allowed_models: [grok-4.3]
