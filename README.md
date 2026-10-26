@@ -188,11 +188,14 @@ Add to `.cursor/mcp.json` in your project, or `~/.cursor/mcp.json` globally. Use
 
 ### Security controls
 
+These controls cover the MCP server only. The REST API and Streamlit UI do not have them yet: the REST API has no authentication (issue #27).
+
 - **Authentication (HTTP).** Set `MCP_AUTH_TOKENS` to require a bearer token. Generate one with `python -m app.mcp_server.tokens <label>`. Without tokens the server starts only on loopback; a non-loopback `--host` exits with an error unless `MCP_ALLOW_INSECURE_BIND=true`. Clients send `Authorization: Bearer <token>`; in Cursor, add `"headers": {"Authorization": "Bearer <token>"}` next to `url`.
 - **Model list.** LLM tools accept only the provider and model pairs in `config/models.yaml` (copy `config/models.example.yaml`, checked against provider pages on 2026-10-25). With no file, only the models set in your environment are allowed. Check a file with `python -m app.mcp_server.model_policy config/models.yaml`. To add or retire a model follow [Updating the model list](docs/runbooks/updating-model-list.md).
 - **Rate limits.** Per client: 60 read calls a minute; 10 model calls a minute and 200 a day. Tune with `MCP_RATE_LIMIT_*`.
 - **Errors.** Clients see a short message and a reference ID. Details stay in the server log under the same ID.
-- **Audit log.** Every tool call, resource read, and prompt is recorded in the append-only `mcp_audit_events` table. Free-text questions are stored as a hash unless `MCP_AUDIT_STORE_TEXT=true`. If the record cannot be written, the call is blocked and returns a reference ID. To get the answer anyway, call the tool again with `accept_unaudited=true` (all 12 tools accept it); the answer comes back marked `UNAUDITED` and the override is written to `MCP_AUDIT_FALLBACK_FILE`. Set `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false` to block without an override.
+- **Audit log.** Every tool call, resource read, and prompt is recorded in the append-only `mcp_audit_events` table. Free-text questions are stored as an HMAC keyed by `MCP_AUDIT_HASH_KEY` unless `MCP_AUDIT_STORE_TEXT=true`; the key is required for HTTP off loopback. If the record cannot be written, the call is blocked and returns a reference ID. To get the answer anyway, call the tool again with `accept_unaudited=true` (all 12 tools accept it); the answer comes back marked `UNAUDITED` and the override is written to `MCP_AUDIT_FALLBACK_FILE`. Set `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false` to block without an override. For `MCP_AUDIT_BREAKER_SECONDS` (default 30) after a failed audit write, model tools are refused before the model is called.
+- **Mock provider.** `mock` works only when the server runs with `LLM_PROVIDER=mock`. Its output starts with `MOCK OUTPUT`.
 
 Operations, token rotation, and audit queries: [MCP operations runbook](docs/runbooks/mcp-operations.md). Design: [ADR 0001](docs/adr/0001-mcp-hardening-and-audit-log.md).
 

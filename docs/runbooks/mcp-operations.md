@@ -12,7 +12,9 @@ Runbook for operators of the Executive AI Advisor MCP server. Design and reasons
 | `MCP_RATE_LIMIT_READ_PER_MINUTE` | `60` | Per client: read tools, resources, prompts. |
 | `MCP_RATE_LIMIT_LLM_PER_MINUTE` | `10` | Per client: tools that call a model. |
 | `MCP_RATE_LIMIT_LLM_PER_DAY` | `200` | Per client, rolling 24 hours. |
-| `MCP_AUDIT_STORE_TEXT` | `false` | Store `query`, `question`, `meeting_focus` text in the audit log instead of a hash and length. |
+| `MCP_AUDIT_STORE_TEXT` | `false` | Store `query`, `question`, `meeting_focus` text in the audit log instead of an HMAC and length. |
+| `MCP_AUDIT_HASH_KEY` | empty | Key for the HMAC-SHA256 of free text, at least 32 characters. Required for HTTP off loopback. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. Empty on stdio or loopback: random per process. |
+| `MCP_AUDIT_BREAKER_SECONDS` | `30` | After an audit write fails, refuse model tools for this many seconds before the provider is called. `0` turns it off. |
 | `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE` | `true` | Allow `accept_unaudited=true` on tools when the audit table cannot be written. `false`: block with no override. |
 | `MCP_AUDIT_FALLBACK_FILE` | `data/audit/mcp_audit_fallback.jsonl` | Append-only file for overrides and refusals during an audit outage. |
 
@@ -26,6 +28,7 @@ Restart the server after any change. Settings are read at startup.
 | HTTP | loopback | none | Starts with a warning. Client is `http:unauthenticated-local`. |
 | HTTP | loopback or other | set | Starts. Every request needs a valid bearer token. |
 | HTTP | other | none | Exits with code 2. |
+| HTTP | other | any, no `MCP_AUDIT_HASH_KEY` | Exits with code 2. |
 | HTTP | other | none, `MCP_ALLOW_INSECURE_BIND=true` | Starts with a warning on every start. |
 
 ## Issue a token
@@ -94,13 +97,21 @@ WHERE kind = 'tool' AND provider IS NOT NULL AND occurred_at > now() - interval 
 GROUP BY 1, 2, 3;
 ```
 
-Arguments hold a SHA-256 hash and length for free text. To check whether a known question was asked, hash it the same way:
+Arguments hold an HMAC-SHA256 and length for free text, keyed by `MCP_AUDIT_HASH_KEY`. To check whether a known question was asked, compute the HMAC with the same key:
+
+```bash
+python -c "import hmac,hashlib,os,sys; print(hmac.new(os.environ['MCP_AUDIT_HASH_KEY'].encode(), sys.argv[1].encode(), hashlib.sha256).hexdigest())" '<exact question>'
+```
 
 ```sql
 SELECT occurred_at, client_id, name
 FROM mcp_audit_events
-WHERE arguments -> 'question' ->> 'sha256' = encode(sha256(convert_to('<exact question>', 'UTF8')), 'hex');
+WHERE arguments -> 'question' ->> 'hmac_sha256' = '<hex from above>';
 ```
+
+Rows written before the HMAC change hold `sha256` instead. For those, use `encode(sha256(convert_to('<exact question>', 'UTF8')), 'hex')` against `arguments -> 'question' ->> 'sha256'`. Rows from a process that ran without a key cannot be matched.
+
+A malformed investigation ID shows as `outcome = 'error'`, `error_class = 'InvalidInput'`, with the raw value in `arguments`. It is not an audit failure.
 
 ### Audit write failures
 
@@ -113,6 +124,7 @@ What the user sees:
 3. The server tries the table again. If it works, the row is normal and `detail` is `accept_unaudited requested`.
 4. If it fails again, the server writes an `unaudited_override` line to the fallback file and returns the answer. The text starts with `UNAUDITED:` and `_meta["eaia/audit"].audited` is `false`.
 5. If the fallback file cannot be written either, the call is blocked with `the audit log and the fallback audit file are both unavailable`.
+6. For `MCP_AUDIT_BREAKER_SECONDS` after a failed write, model tools are refused before the provider is called. The message says the model was not called. That refusal is audited too; if the write works, the message says to call again and the next call runs. `accept_unaudited=true` skips the breaker.
 
 Alert on the ERROR message `Audit write failed` on logger `eaia.mcp.audit`. Every record is also logged at INFO on that logger.
 

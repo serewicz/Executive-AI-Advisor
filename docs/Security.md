@@ -54,13 +54,16 @@ The MCP server (`python -m app.mcp_server`) exposes read-only tools, some of whi
 | Cost abuse | Provider/model allowlist (`config/models.yaml`); per-client rate limits on model calls |
 | Disclosure through errors | Clients get fixed messages and a reference ID; detail stays in server logs |
 | Prompt injection in documents | Tools are read-only; no write or network tools; every call is audited |
-| Sensitive text in the audit log | `query`, `question`, `meeting_focus` stored as hash and length by default |
+| Sensitive text in the audit log | `query`, `question`, `meeting_focus` stored as HMAC-SHA256 (`MCP_AUDIT_HASH_KEY`) and length by default; the key is required off loopback |
+| Paid calls repeated during an audit outage | Circuit breaker: model tools refused before the provider for `MCP_AUDIT_BREAKER_SECONDS` after a failed write |
+| Canned mock output mistaken for advice | `mock` allowed only when `LLM_PROVIDER=mock`; output labeled `MOCK OUTPUT` |
+| Malformed IDs posing as audit outages | Investigation IDs validated before the audit insert |
 | Calls go unrecorded during a database outage | Fail closed: results are withheld. A tool caller can re-call with `accept_unaudited=true`; the override is synced to an append-only fallback file before the result, marked `UNAUDITED`, is returned. `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false` removes the override |
 | Audit tampering | Triggers block UPDATE, DELETE, TRUNCATE; run the server as a non-owner role for stronger protection |
 
 Configuration and procedures: [MCP operations runbook](runbooks/mcp-operations.md).
 
-Known limits: rate limits are in memory per process; an audit outage stops results until the database returns or the caller overrides; a refused model call has already spent tokens and an override spends them again; the fallback file is local and not tamper-evident; the model allowlist applies to MCP, not yet to the REST API or Streamlit UI.
+Known limits: rate limits are in memory per process; an audit outage stops results until the database returns or the caller overrides; a refused model call has already spent tokens and an override spends them again; the fallback file is local and not tamper-evident; the model allowlist applies to MCP, not yet to the REST API or Streamlit UI. The REST API has no authentication and the Dockerfile binds 0.0.0.0 with `--reload`; see issue #27. Do not expose the API port.
 
 ## AI Incident Response and Board Escalation
 

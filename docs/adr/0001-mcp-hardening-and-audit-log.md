@@ -2,7 +2,7 @@
 
 Status: Accepted, pending review. Tracking issue: #23. Order: 1 of 3. ADR 0002 (#24) and ADR 0003 (#25) build on it.
 
-Date: 2026-10-25. Revised 2026-10-25: audit failure changed from fail open to fail closed with an explicit override (section 6.1); the model allowlist became a dated model list (section 2).
+Date: 2026-10-25. Revised 2026-10-25: audit failure changed from fail open to fail closed with an explicit override (section 6.1); the model allowlist became a dated model list (section 2). Revised again after code review: free text is hashed with a keyed HMAC (section 6.2), malformed investigation IDs are validation errors (section 6.3), a circuit breaker stops model calls during an audit outage (section 6.4), and the mock provider runs only in mock mode (section 2).
 
 This record describes the design as built. Section "Changes from the draft" lists where the implementation differs from the version attached to #23.
 
@@ -79,6 +79,8 @@ The file is a list of current models, not only a list of names:
 
 Local models and new default models were split out of this ADR's PR into a separate draft PR, so this change covers only hardening and the list format.
 
+Mock provider. The mock provider returns canned text. It is allowed only when the server runs with `LLM_PROVIDER=mock`; otherwise a call naming `mock` is denied before retrieval, whatever the model list says. Without this, a deployment with no `models.yaml` let any caller get a canned board brief that looks real. Mock results start with a `MOCK OUTPUT:` text block and carry `_meta["eaia/mock"] = true`.
+
 Alternative: remove `llm_model` from MCP entirely. Rejected because model choice per task is a real need (cheap model for search summaries, stronger model for diligence); the fix is governance, not removal.
 
 ### 3. Error handling
@@ -120,7 +122,7 @@ New table `mcp_audit_events` (Alembic migration after `20260608_0007`):
 | transport | text | `stdio` / `http` |
 | kind | text | `tool` / `resource` / `prompt` |
 | name | text | tool or resource name |
-| arguments | jsonb | redacted: `query`/`question` stored as SHA-256 plus length unless `MCP_AUDIT_STORE_TEXT=true` |
+| arguments | jsonb | redacted: `query`/`question`/`meeting_focus` stored as HMAC-SHA256 plus length unless `MCP_AUDIT_STORE_TEXT=true` (section 6.2) |
 | document_set_id | uuid null | |
 | outcome | text | `ok` / `error` / `rate_limited` / `denied` |
 | error_class | text null | |
@@ -171,6 +173,27 @@ Risks:
 - A caller model could set `accept_unaudited=true` on its own. The field description says not to, the value appears in the client's tool-call view, and every use is recorded. If that is not enough, set the override off.
 - The fallback file grows during an outage and is never rotated by the application. The runbook covers rotation.
 
+#### 6.2 Hashing free text
+
+Free text (`query`, `question`, `meeting_focus`) is stored as `{"hmac_sha256": ..., "length": ...}`, keyed by `MCP_AUDIT_HASH_KEY`. A plain SHA-256 of a short question can be reversed by hashing guesses; a keyed hash cannot be checked without the key.
+
+- The key is required for HTTP on a non-loopback host. The server exits with code 2 without it, or if it is shorter than 32 characters.
+- On stdio and loopback HTTP with no key, the server uses a random key for the life of the process and logs a warning. Hashes from that process cannot be matched later.
+- Generate a key: `python -c "import secrets; print(secrets.token_hex(32))"`. Store it with the other secrets. Rotating it makes older hashes unmatchable with the new key; keep the old key if you need to check old rows.
+- This is a change: rows written before it have a `sha256` field; rows after it have `hmac_sha256`. Queries that compared `sha256` must change (runbook).
+
+#### 6.3 Malformed investigation IDs
+
+Resources and prompts take an investigation ID as a string. A value that is not a UUID used to reach the `uuid` column in the audit insert, fail there, and look like an audit outage. The guard now parses the ID first: a malformed value is an `InvalidInput` error, audited with `outcome = error`, `document_set_id` null, and the raw value in `arguments`.
+
+#### 6.4 Circuit breaker
+
+When an audit write fails, a model call has already spent tokens before the refusal. To limit that, for `MCP_AUDIT_BREAKER_SECONDS` (default 30, `0` turns it off) after a failed write, tools that call a model are refused before retrieval or the provider runs. The message says the model was not called.
+
+- The refusal is itself audited. If that write succeeds, the breaker closes and the caller is told to call again.
+- `accept_unaudited=true` skips the breaker: the call runs and the audit table is retried before the fallback file, as in 6.1. A user who asked for the answer gets it.
+- Read tools, resources, and prompts are not affected; they cost nothing to retry.
+
 Resources and prompts are audited with `kind` = `resource` or `prompt`. A read-only MCP resource `eaia://audit/recent` is not added; audit data is for operators, not for the model.
 
 Alternative: structured log lines only. Rejected as the sole store: logs rotate and are hard to query for an auditor. Structured logs are still emitted in parallel.
@@ -184,7 +207,9 @@ Alternative: structured log lines only. Rejected as the sole store: logs rotate 
 | Cost abuse (expensive model, call flooding) | Model allowlist; rate limits; ADR 0003 budgets |
 | Information disclosure via errors | Generic messages, correlation IDs |
 | Prompt injection in documents causing tool misuse | Tools are read-only; no write or network tools; audit trail for review |
-| Sensitive text in audit log | Query/question hashed by default |
+| Sensitive text in audit log | Free text stored as keyed HMAC by default; key required off loopback |
+| Repeated paid calls during an audit outage | Circuit breaker refuses model calls before the provider for 30 s after a failure |
+| Canned output mistaken for advice | Mock allowed only with `LLM_PROVIDER=mock`; output labeled |
 | Audit tampering | Append-only triggers; optional least-privilege role |
 | Audit outage hides calls | Fail closed. Results are withheld unless the caller overrides; each override is written to a synced fallback file first |
 | Caller model overrides audit without the user asking | Override visible in the tool call; recorded in table or fallback file; can be turned off |
@@ -203,8 +228,13 @@ Alternative: structured log lines only. Rejected as the sole store: logs rotate 
 10. A call with `accept_unaudited=true` retries the table; on a second failure it writes an `unaudited_override` line to the fallback file before returning a result marked `UNAUDITED` in text and `_meta`.
 11. With `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false`, or when the fallback file cannot be written, the override is refused.
 12. Resources and prompts have no override.
+13. `accept_unaudited` works on all 12 tools.
+14. A malformed investigation ID is audited as a validation error, not an audit failure.
+15. Free text is stored as HMAC-SHA256; HTTP off loopback without `MCP_AUDIT_HASH_KEY` exits 2.
+16. After an audit failure, model tools are refused before the provider until the breaker closes; the override still runs.
+17. `mock` is denied unless `LLM_PROVIDER=mock`; mock output is labeled.
 
-All twelve are covered by tests in `tests/test_mcp_hardening.py` and `tests/test_mcp_audit_postgres.py`. The Postgres tests run when `EAIA_PG_INTEGRATION_URL` is set; CI does not set it yet (see Follow-ups).
+All seventeen are covered by tests in `tests/test_mcp_hardening.py` and `tests/test_mcp_audit_postgres.py`. The Postgres tests run when `EAIA_PG_INTEGRATION_URL` is set; CI does not set it yet; the CI change is on local branch `ci-postgres-tests` (see Follow-ups).
 
 ## Test plan
 
@@ -234,15 +264,18 @@ All twelve are covered by tests in `tests/test_mcp_hardening.py` and `tests/test
 | Append-only through grants | Triggers, plus optional `INSERT, SELECT` role | The app role owns the table, so grants do not bind it |
 | Audit failure behavior unstated | Fail closed, with an explicit `accept_unaudited` override recorded in a fallback file | First built as fail open; changed after owner review (section 6.1) |
 | Allowlist of model names | Dated model list with notes and a validation command | Makes the list easy to keep current |
+| SHA-256 of free text | HMAC-SHA256 with `MCP_AUDIT_HASH_KEY` | Plain hashes of short text can be guessed |
+| Local provider and new default models in this PR | Split to a separate draft PR | Review: keep this PR to hardening |
 | Allowlist for the server | Allowlist for MCP only | Keeps this change inside the MCP layer; ADR 0002 moves it to the service layer |
 | `provider`/`model` filled by ADR 0002 | Filled now for LLM tools | The allowlist already resolves both |
 | Custom auth middleware implied | MCP SDK bearer middleware with a static verifier | Less code, standard 401 behavior, path to OAuth |
 
 ## Follow-ups
 
-- Run `tests/test_mcp_audit_postgres.py` in CI: set `EAIA_PG_INTEGRATION_URL` and move `alembic upgrade head` before `pytest` in `ci-validate.yml`. Not done here because the change touches `.github/workflows`.
+- Run `tests/test_mcp_audit_postgres.py` in CI: set `EAIA_PG_INTEGRATION_URL` and move `alembic upgrade head` before `pytest` in `ci-validate.yml`. The commit is on local branch `ci-postgres-tests` and is not pushed: pushing workflow files needs a token with `workflow` scope.
 - Shared rate-limit backend before running more than one MCP instance.
 - Apply the model allowlist to REST and Streamlit (ADR 0002).
+- REST API authentication and the Dockerfile bind: issue #27.
 
 ## Dependencies
 
