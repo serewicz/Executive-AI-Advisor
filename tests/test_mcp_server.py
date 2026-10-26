@@ -158,7 +158,7 @@ def test_resources_and_prompts_are_listed():
         resources = await client.list_resources()
         templates = await client.list_resource_templates()
         prompts = await client.list_prompts()
-        prompt = await client.get_prompt("board_meeting_prep", {"document_set_id": "abc"})
+        prompt = await client.get_prompt("board_meeting_prep", {"document_set_id": str(uuid4())})
         return resources, templates, prompts, prompt
 
     resources, templates, prompts, prompt = run_client(make_server(FakeSession), scenario)

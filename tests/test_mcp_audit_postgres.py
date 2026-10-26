@@ -40,7 +40,7 @@ def write_record(session_factory, **overrides):
         transport="stdio",
         kind="tool",
         name="search_evidence",
-        arguments={"query": {"sha256": "0" * 64, "length": 4}},
+        arguments={"query": {"hmac_sha256": "0" * 64, "length": 4}},
         **overrides,
     )
     DatabaseAuditSink(session_factory).write(record)

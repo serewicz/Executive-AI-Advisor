@@ -15,6 +15,8 @@ ADR 0001.
 from __future__ import annotations
 
 import hashlib
+import hmac
+import secrets
 import json
 import logging
 import os
@@ -54,13 +56,48 @@ class AuditSink(Protocol):
     def write(self, record: AuditRecord) -> None: ...
 
 
-def redact_arguments(arguments: dict[str, Any], store_text: bool) -> dict[str, Any]:
+MIN_HASH_KEY_LENGTH = 32
+
+
+class AuditHashKeyError(ValueError):
+    """MCP_AUDIT_HASH_KEY is missing where required, or too short."""
+
+
+def resolve_hash_key(configured: str | None, *, required: bool) -> bytes:
+    """Return the HMAC key for free-text audit hashes.
+
+    With no key configured and ``required`` false (stdio, loopback HTTP), a random key is
+    generated for this process. Hashes then match only within one process lifetime.
+    """
+    if configured:
+        if len(configured) < MIN_HASH_KEY_LENGTH:
+            raise AuditHashKeyError(f"MCP_AUDIT_HASH_KEY must be at least {MIN_HASH_KEY_LENGTH} characters.")
+        return configured.encode("utf-8")
+    if required:
+        raise AuditHashKeyError(
+            "MCP_AUDIT_HASH_KEY is required for HTTP on a non-loopback host. "
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+        )
+    logger.warning(
+        "MCP_AUDIT_HASH_KEY is not set. Using a random key for this process; free-text audit hashes "
+        "will not match across restarts."
+    )
+    return secrets.token_bytes(32)
+
+
+def hash_text(value: str, key: bytes) -> str:
+    return hmac.new(key, value.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def redact_arguments(arguments: dict[str, Any], store_text: bool, hash_key: bytes | None = None) -> dict[str, Any]:
+    if not store_text and not hash_key:
+        raise AuditHashKeyError("A hash key is required unless free text is stored.")
     redacted: dict[str, Any] = {}
     for key, value in arguments.items():
         if value is None:
             continue
         if key in FREE_TEXT_ARGUMENTS and isinstance(value, str) and not store_text:
-            redacted[key] = {"sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(), "length": len(value)}
+            redacted[key] = {"hmac_sha256": hash_text(value, hash_key), "length": len(value)}
         elif isinstance(value, (str, int, float, bool)):
             redacted[key] = value
         else:

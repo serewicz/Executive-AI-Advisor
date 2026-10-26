@@ -7,7 +7,8 @@ import logging
 import sys
 
 from app.core.config import settings
-from app.mcp_server.auth import InsecureBindError, StaticTokenVerifier, check_http_bind, parse_token_entries
+from app.mcp_server.audit import AuditHashKeyError, resolve_hash_key
+from app.mcp_server.auth import InsecureBindError, StaticTokenVerifier, check_http_bind, is_loopback_host, parse_token_entries
 from app.mcp_server.server import create_server
 
 logger = logging.getLogger("eaia.mcp")
@@ -38,7 +39,8 @@ def main(argv: list[str] | None = None) -> None:
     try:
         entries = parse_token_entries(settings.mcp_auth_tokens)
         check_http_bind(args.host, has_tokens=bool(entries), allow_insecure=settings.mcp_allow_insecure_bind)
-    except (InsecureBindError, ValueError) as exc:
+        hash_key = resolve_hash_key(settings.mcp_audit_hash_key, required=not is_loopback_host(args.host))
+    except (InsecureBindError, AuditHashKeyError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
 
@@ -46,6 +48,7 @@ def main(argv: list[str] | None = None) -> None:
         transport="http",
         token_verifier=StaticTokenVerifier(entries) if entries else None,
         public_url=args.public_url or f"http://{args.host}:{args.port}",
+        audit_hash_key=hash_key,
     )
     server.run("streamable-http", host=args.host, port=args.port)
 

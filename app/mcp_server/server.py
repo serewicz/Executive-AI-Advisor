@@ -65,6 +65,7 @@ from app.mcp_server.audit import (
     FallbackAuditFile,
     LoggingAuditSink,
     redact_arguments,
+    resolve_hash_key,
 )
 from app.mcp_server.model_policy import ModelPolicy, load_model_policy
 from app.mcp_server.rate_limit import LimitPolicy, RateLimiter
@@ -180,9 +181,11 @@ class CallGuard:
         model_policy: ModelPolicy,
         config: Settings,
         fallback: FallbackAuditFile | None = None,
+        hash_key: bytes | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.fallback = fallback
+        self.hash_key = hash_key or resolve_hash_key(config.mcp_audit_hash_key, required=False)
         self.transport = transport
         self.audit_sink = audit_sink
         self.rate_limiter = rate_limiter
@@ -219,7 +222,7 @@ class CallGuard:
             transport=self.transport,
             kind=kind,
             name=name,
-            arguments=redact_arguments(arguments, self.config.mcp_audit_store_text),
+            arguments=redact_arguments(arguments, self.config.mcp_audit_store_text, self.hash_key),
         )
         # The audit column is a UUID. Parse here so a malformed ID is a validation error,
         # not a failed audit insert that looks like an outage.
@@ -377,6 +380,7 @@ def create_server(
     public_url: str | None = None,
     config: Settings | None = None,
     fallback_audit: FallbackAuditFile | None = None,
+    audit_hash_key: bytes | None = None,
 ) -> MCPServer:
     """Build the Executive AI Advisor MCP server.
 
@@ -407,6 +411,7 @@ def create_server(
         ),
         model_policy=model_policy or load_model_policy(config),
         config=config,
+        hash_key=audit_hash_key,
     )
 
     @contextmanager
@@ -451,7 +456,7 @@ def create_server(
 
     mcp = MCPServer(
         name="executive-ai-advisor",
-        title=settings.app_name,
+        title=config.app_name,
         instructions=SERVER_INSTRUCTIONS,
         website_url="https://github.com/serewicz/Executive-AI-Advisor",
         **auth_kwargs,

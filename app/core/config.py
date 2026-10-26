@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     mcp_rate_limit_llm_per_minute: int = Field(default=10, ge=1, alias="MCP_RATE_LIMIT_LLM_PER_MINUTE")
     mcp_rate_limit_llm_per_day: int = Field(default=200, ge=1, alias="MCP_RATE_LIMIT_LLM_PER_DAY")
     mcp_audit_store_text: bool = Field(default=False, alias="MCP_AUDIT_STORE_TEXT")
+    # HMAC key for free-text audit hashes. Required for HTTP on a non-loopback host.
+    mcp_audit_hash_key: str | None = Field(default=None, alias="MCP_AUDIT_HASH_KEY")
     # Fail-closed audit (ADR 0001). false = no override; an unaudited call always fails.
     mcp_audit_allow_unaudited_override: bool = Field(default=True, alias="MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE")
     mcp_audit_fallback_file: Path = Field(

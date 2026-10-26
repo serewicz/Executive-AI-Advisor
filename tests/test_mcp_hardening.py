@@ -18,7 +18,15 @@ from app.advisor.providers.base import LLMError
 from app.core.config import settings
 from app.mcp_server import create_server
 from app.mcp_server.__main__ import main
-from app.mcp_server.audit import AuditRecord, FallbackAuditFile, MemoryAuditSink, redact_arguments
+from app.mcp_server.audit import (
+    AuditHashKeyError,
+    AuditRecord,
+    FallbackAuditFile,
+    MemoryAuditSink,
+    hash_text,
+    redact_arguments,
+    resolve_hash_key,
+)
 from app.mcp_server.auth import (
     InsecureBindError,
     StaticTokenVerifier,
@@ -143,6 +151,7 @@ def test_entry_point_refuses_public_bind_without_tokens(monkeypatch, capsys):
 
 def test_entry_point_enables_bearer_auth_when_tokens_configured(monkeypatch):
     created = {}
+    monkeypatch.setattr(settings, "mcp_audit_hash_key", "k" * 32)
 
     class StubServer:
         def run(self, transport, **kwargs):
@@ -796,3 +805,74 @@ def test_malformed_investigation_id_is_a_validation_error_not_an_audit_outage(ta
     assert record.arguments["document_set_id"] == "not-a-uuid"
     assert "Audit write failed" not in caplog.text
     assert fallback_lines(fallback.path) == []
+
+
+# ------------------------------------------------------------------ free-text hashing
+
+KEY = "k" * 32
+
+
+def test_free_text_is_hmac_not_plain_sha256():
+    import hashlib
+
+    redacted = redact_arguments({"question": "Is the Acme deal at risk?"}, store_text=False, hash_key=KEY.encode())
+    digest = redacted["question"]["hmac_sha256"]
+    assert "sha256" not in redacted["question"]
+    assert digest != hashlib.sha256(b"Is the Acme deal at risk?").hexdigest()
+    assert digest == hash_text("Is the Acme deal at risk?", KEY.encode())
+    other = redact_arguments({"question": "Is the Acme deal at risk?"}, store_text=False, hash_key=b"x" * 32)
+    assert other["question"]["hmac_sha256"] != digest
+
+
+def test_hash_key_rules(caplog):
+    assert resolve_hash_key(KEY, required=True) == KEY.encode()
+    with pytest.raises(AuditHashKeyError, match="at least 32"):
+        resolve_hash_key("short", required=False)
+    with pytest.raises(AuditHashKeyError, match="required"):
+        resolve_hash_key(None, required=True)
+    with caplog.at_level(logging.WARNING):
+        first = resolve_hash_key(None, required=False)
+    assert len(first) == 32 and first != resolve_hash_key(None, required=False)
+    assert "MCP_AUDIT_HASH_KEY is not set" in caplog.text
+    with pytest.raises(AuditHashKeyError):
+        redact_arguments({"question": "q"}, store_text=False, hash_key=None)
+
+
+def test_server_uses_the_configured_hash_key(monkeypatch):
+    monkeypatch.setattr("app.retrieval.vector_search.search_similar_chunks", lambda **kwargs: [make_result()])
+    config = settings.model_copy(update={"mcp_audit_hash_key": KEY})
+    server, sink = build(config=config)
+
+    call(server, "search_evidence", {"query": "who deploys?"})
+
+    assert sink.records[-1].arguments["query"]["hmac_sha256"] == hash_text("who deploys?", KEY.encode())
+
+
+def test_public_http_bind_requires_hash_key(monkeypatch, capsys):
+    monkeypatch.setattr(settings, "mcp_auth_tokens", "cursor:" + "a" * 64)
+    monkeypatch.setattr(settings, "mcp_audit_hash_key", None)
+    monkeypatch.setattr(
+        "app.mcp_server.__main__.create_server", lambda **kwargs: pytest.fail("server must not be created")
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--transport", "streamable-http", "--host", "0.0.0.0"])
+
+    assert exit_info.value.code == 2
+    assert "MCP_AUDIT_HASH_KEY is required" in capsys.readouterr().err
+
+
+def test_loopback_http_without_hash_key_starts(monkeypatch):
+    monkeypatch.setattr(settings, "mcp_auth_tokens", None)
+    monkeypatch.setattr(settings, "mcp_audit_hash_key", None)
+    created = {}
+
+    class Stub:
+        def run(self, *args, **kwargs):
+            created["ran"] = True
+
+    monkeypatch.setattr("app.mcp_server.__main__.create_server", lambda **kwargs: created.update(kwargs) or Stub())
+
+    main(["--transport", "streamable-http", "--host", "127.0.0.1"])
+
+    assert created["ran"] and len(created["audit_hash_key"]) == 32
