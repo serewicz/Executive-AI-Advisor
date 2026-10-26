@@ -876,3 +876,130 @@ def test_loopback_http_without_hash_key_starts(monkeypatch):
     main(["--transport", "streamable-http", "--host", "127.0.0.1"])
 
     assert created["ran"] and len(created["audit_hash_key"]) == 32
+
+
+# ------------------------------------------------------------------ audit circuit breaker
+
+
+class FlakySink(MemoryAuditSink):
+    """Fails while ``down`` is true."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.down = True
+        self.attempts = 0
+
+    def write(self, record: AuditRecord) -> None:
+        self.attempts += 1
+        if self.down:
+            raise RuntimeError("database down")
+        super().write(record)
+
+
+def breaker_server(monkeypatch, tmp_path, **config_updates):
+    empty_sets(monkeypatch)
+    provider_calls = []
+
+    def spy(**kwargs):
+        provider_calls.append(kwargs)
+        return [make_result()]
+
+    monkeypatch.setattr("app.advisor.service.search_similar_chunks", spy)
+    monkeypatch.setattr("app.retrieval.vector_search.search_similar_chunks", spy)
+    sink = FlakySink()
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    config = settings.model_copy(update=config_updates) if config_updates else None
+    server, _ = build(audit_sink=sink, fallback_audit=fallback, **({"config": config} if config else {}))
+    clock = FakeClock()
+    server.call_guard._clock = clock
+    return server, sink, fallback, clock, provider_calls
+
+
+ASK = {"question": "Key risks?", "llm_provider": "mock"}
+
+
+def test_breaker_refuses_model_tools_before_the_provider(monkeypatch, tmp_path):
+    server, sink, fallback, clock, provider_calls = breaker_server(monkeypatch, tmp_path)
+
+    async def scenario(client):
+        await client.call_tool("list_investigations", {})  # audit fails, breaker opens
+        clock.now = 10
+        return await client.call_tool("ask_advisor", ASK)
+
+    result = run_client(server, scenario)
+
+    assert provider_calls == []
+    text = result.content[0].text
+    assert result.is_error and "The model was not called." in text and "accept_unaudited=true" in text
+    assert [e["event"] for e in fallback_lines(fallback.path)] == ["audit_refused", "audit_refused"]
+    assert fallback_lines(fallback.path)[1]["outcome"] == "denied"
+
+
+def test_breaker_refusal_closes_the_breaker_when_the_audit_log_is_back(monkeypatch, tmp_path):
+    server, sink, fallback, clock, provider_calls = breaker_server(monkeypatch, tmp_path)
+
+    async def scenario(client):
+        await client.call_tool("list_investigations", {})
+        sink.down = False
+        clock.now = 5
+        first = await client.call_tool("ask_advisor", ASK)
+        second = await client.call_tool("ask_advisor", ASK)
+        return first, second
+
+    first, second = run_client(server, scenario)
+
+    assert first.is_error and "audit log is working again" in first.content[0].text
+    assert sink.records[0].outcome == "denied"
+    assert sink.records[0].detail.startswith("audit circuit breaker open")
+    assert second.is_error is False
+    assert len(provider_calls) == 1
+
+
+def test_override_passes_the_breaker_and_still_retries_the_audit(monkeypatch, tmp_path):
+    server, sink, fallback, clock, provider_calls = breaker_server(monkeypatch, tmp_path)
+
+    async def scenario(client):
+        await client.call_tool("list_investigations", {})
+        clock.now = 5
+        return await client.call_tool("ask_advisor", {**ASK, "accept_unaudited": True})
+
+    result = run_client(server, scenario)
+
+    assert len(provider_calls) == 1
+    assert sink.attempts == 2  # the override tried the audit table before using the fallback file
+    assert result.content[0].text.startswith("UNAUDITED:")
+    assert [e["event"] for e in fallback_lines(fallback.path)] == ["audit_refused", "unaudited_override"]
+
+
+def test_breaker_expires_and_does_not_affect_read_tools(monkeypatch, tmp_path):
+    server, sink, fallback, clock, provider_calls = breaker_server(monkeypatch, tmp_path)
+
+    async def scenario(client):
+        await client.call_tool("list_investigations", {})
+        clock.now = 1
+        await client.call_tool("search_evidence", {"query": "risk"})  # read tool: runs, audit attempted
+        sink.down = False
+        clock.now = 31  # 30 seconds after the last failure at t=1
+        return await client.call_tool("ask_advisor", ASK)
+
+    result = run_client(server, scenario)
+
+    assert sink.attempts == 3
+    assert len(provider_calls) == 2  # search_evidence and ask_advisor both ran
+    assert result.is_error is False
+
+
+def test_breaker_can_be_turned_off(monkeypatch, tmp_path):
+    server, sink, fallback, clock, provider_calls = breaker_server(
+        monkeypatch, tmp_path, mcp_audit_breaker_seconds=0
+    )
+
+    async def scenario(client):
+        await client.call_tool("list_investigations", {})
+        sink.down = False
+        return await client.call_tool("ask_advisor", ASK)
+
+    result = run_client(server, scenario)
+
+    assert result.is_error is False
+    assert len(provider_calls) == 1

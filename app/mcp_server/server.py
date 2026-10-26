@@ -192,6 +192,12 @@ class CallGuard:
         self.model_policy = model_policy
         self.config = config
         self._clock = clock
+        self._audit_failed_at: float | None = None
+
+    def breaker_open(self) -> bool:
+        """True if an audit write failed within MCP_AUDIT_BREAKER_SECONDS."""
+        window = self.config.mcp_audit_breaker_seconds
+        return bool(window) and self._audit_failed_at is not None and self._clock() - self._audit_failed_at < window
 
     def client_id(self) -> str:
         token = get_access_token()
@@ -235,6 +241,7 @@ class CallGuard:
             record.detail = "accept_unaudited requested"
         failure: PublicError | None = None
         result: Any = None
+        breaker_refused = False
         try:
             if set_id_error is not None:
                 raise set_id_error
@@ -249,6 +256,13 @@ class CallGuard:
                 if not self.model_policy.is_allowed(provider, model):
                     record.outcome = "denied"
                     raise Denied("Model not allowed for this provider.")
+                if not accept_unaudited and self.breaker_open():
+                    # Do not spend tokens on a call the audit log will probably refuse.
+                    # An override skips this check; it still runs the call and retries the audit write.
+                    breaker_refused = True
+                    record.outcome = "denied"
+                    record.detail = "audit circuit breaker open; provider not called"
+                    raise AuditUnavailable("The model was not called because the audit log failed recently.")
             result = operation()
         except Exception as exc:  # noqa: BLE001 - every failure is mapped and audited
             failure = to_public_error(exc, correlation_id)
@@ -262,7 +276,19 @@ class CallGuard:
         try:
             self.audit_sink.write(record)
         except AuditWriteError as exc:
+            self._audit_failed_at = self._clock()
             return self._unaudited(record, failure, result, accept_unaudited, exc)
+        self._audit_failed_at = None
+
+        if breaker_refused:
+            raise ToolError(
+                AuditUnavailable(
+                    "The model was not called because the audit log failed within the last "
+                    f"{self.config.mcp_audit_breaker_seconds} seconds. This refusal was recorded, so the "
+                    "audit log is working again. Call the tool again.",
+                    record.correlation_id,
+                ).client_text()
+            ) from None
 
         if failure is not None:
             raise ToolError(failure.client_text()) from None
@@ -308,6 +334,8 @@ class CallGuard:
 
     def _refusal_text(self, record: AuditRecord) -> str:
         message = "The call was blocked because it could not be written to the audit log."
+        if record.detail and record.detail.startswith("audit circuit breaker open"):
+            message += " The model was not called."
         if record.kind == "tool" and self.config.mcp_audit_allow_unaudited_override:
             message += (
                 " If you still want the answer, call the tool again with the same arguments and "

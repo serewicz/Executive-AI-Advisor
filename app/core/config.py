@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     mcp_audit_hash_key: str | None = Field(default=None, alias="MCP_AUDIT_HASH_KEY")
     # Fail-closed audit (ADR 0001). false = no override; an unaudited call always fails.
     mcp_audit_allow_unaudited_override: bool = Field(default=True, alias="MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE")
+    # After an audit write failure, refuse model tools for this many seconds before calling the
+    # provider, unless the caller passes accept_unaudited. 0 turns the breaker off.
+    mcp_audit_breaker_seconds: int = Field(default=30, ge=0, alias="MCP_AUDIT_BREAKER_SECONDS")
     mcp_audit_fallback_file: Path = Field(
         default=Path("data/audit/mcp_audit_fallback.jsonl"), alias="MCP_AUDIT_FALLBACK_FILE"
     )
