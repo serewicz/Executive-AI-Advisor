@@ -155,7 +155,7 @@ Behavior:
 6. If the fallback file also cannot be written, the override is refused. There is then no durable record of the override, so the answer is not returned.
 7. If the operation itself failed (for example, the model was denied), the override returns that error with the `UNAUDITED` notice. No data leaves, so there is nothing to withhold.
 
-Scope: the override exists for tools only. Resources and prompts fail closed with no override. MCP resources and prompts do not take extra arguments in a way clients present to users, and neither carries a cost that a retry would repeat.
+Scope: the override exists on all 12 tools (`test_override_reaches_the_guard_on_every_tool` checks each one). Resources and prompts fail closed with no override. MCP resources and prompts do not take extra arguments in a way clients present to users, and neither carries a cost that a retry would repeat.
 
 Settings:
 - `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE` (default `true`). `false` makes every audit failure a hard failure. Use `false` where policy says no record, no answer.

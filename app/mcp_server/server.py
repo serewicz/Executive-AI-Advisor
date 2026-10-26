@@ -579,6 +579,7 @@ def create_server(
                     "top_k": top_k,
                     "llm_provider": llm_provider,
                     "llm_model": llm_model,
+                    "accept_unaudited": accept_unaudited,
                 },
                 lambda db: func(
                     document_set_id=document_set_id,

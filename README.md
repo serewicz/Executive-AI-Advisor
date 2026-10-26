@@ -193,7 +193,7 @@ Add to `.cursor/mcp.json` in your project, or `~/.cursor/mcp.json` globally. Use
 - **Local models.** Provider `local` sends requests to any OpenAI-compatible server (Ollama, llama.cpp, vLLM) at `LOCAL_LLM_BASE_URL`. No vendor key is needed.
 - **Rate limits.** Per client: 60 read calls a minute; 10 model calls a minute and 200 a day. Tune with `MCP_RATE_LIMIT_*`.
 - **Errors.** Clients see a short message and a reference ID. Details stay in the server log under the same ID.
-- **Audit log.** Every tool call, resource read, and prompt is recorded in the append-only `mcp_audit_events` table. Free-text questions are stored as a hash unless `MCP_AUDIT_STORE_TEXT=true`. If the record cannot be written, the call is blocked and returns a reference ID. To get the answer anyway, call the tool again with `accept_unaudited=true`; the answer comes back marked `UNAUDITED` and the override is written to `MCP_AUDIT_FALLBACK_FILE`. Set `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false` to block without an override.
+- **Audit log.** Every tool call, resource read, and prompt is recorded in the append-only `mcp_audit_events` table. Free-text questions are stored as a hash unless `MCP_AUDIT_STORE_TEXT=true`. If the record cannot be written, the call is blocked and returns a reference ID. To get the answer anyway, call the tool again with `accept_unaudited=true` (all 12 tools accept it); the answer comes back marked `UNAUDITED` and the override is written to `MCP_AUDIT_FALLBACK_FILE`. Set `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false` to block without an override.
 
 Operations, token rotation, and audit queries: [MCP operations runbook](docs/runbooks/mcp-operations.md). Design: [ADR 0001](docs/adr/0001-mcp-hardening-and-audit-log.md).
 

@@ -713,13 +713,50 @@ def test_resources_and_prompts_have_no_override(monkeypatch, tmp_path):
     assert [e["event"] for e in fallback_lines(fallback.path)] == ["audit_refused", "audit_refused"]
 
 
-def test_every_tool_accepts_the_override_argument():
+def _tool_names() -> list[str]:
     server, _ = build()
+    return sorted(tool.name for tool in run_client(server, lambda c: c.list_tools()).tools)
 
-    tools = run_client(server, lambda c: c.list_tools())
 
-    for tool in tools.tools:
-        assert tool.input_schema["properties"]["accept_unaudited"]["default"] is False, tool.name
+ALL_TOOLS = _tool_names()
+
+
+def test_tool_inventory_matches_the_docs():
+    # README, ADR 0001, and the runbooks state this count. Update them together.
+    assert len(ALL_TOOLS) == 12, ALL_TOOLS
+
+
+def _minimal_arguments(schema: dict) -> dict:
+    values = {"document_set_id": str(uuid4()), "query": "who deploys?", "question": "Key risks?"}
+    return {name: values[name] for name in schema.get("required", [])}
+
+
+@pytest.mark.parametrize("tool_name", ALL_TOOLS)
+def test_override_reaches_the_guard_on_every_tool(tool_name, monkeypatch, tmp_path):
+    """Each tool must pass accept_unaudited through to CallGuard (review finding on PR #26)."""
+    empty_sets(monkeypatch)
+    sink = BrokenSink()
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    server, _ = build(audit_sink=sink, fallback_audit=fallback)
+    tools = {t.name: t for t in run_client(server, lambda c: c.list_tools()).tools}
+    schema = tools[tool_name].input_schema
+    assert schema["properties"]["accept_unaudited"]["default"] is False
+    arguments = _minimal_arguments(schema)
+
+    async def scenario(client):
+        return (
+            await client.call_tool(tool_name, arguments),
+            await client.call_tool(tool_name, {**arguments, "accept_unaudited": True}),
+        )
+
+    refused, overridden = run_client(server, scenario)
+
+    assert "could not be written to the audit log" in refused.content[0].text
+    # The override may succeed or carry the tool's own error, but it must not be refused again.
+    assert "could not be written to the audit log" not in overridden.content[0].text
+    assert "UNAUDITED" in overridden.content[0].text
+    assert [e["event"] for e in fallback_lines(fallback.path)] == ["audit_refused", "unaudited_override"]
+    assert sink.attempts == 2
 
 
 def test_fallback_file_appends_and_never_truncates(tmp_path):
