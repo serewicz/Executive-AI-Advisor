@@ -1003,3 +1003,47 @@ def test_breaker_can_be_turned_off(monkeypatch, tmp_path):
 
     assert result.is_error is False
     assert len(provider_calls) == 1
+
+
+# ------------------------------------------------------------------ mock provider
+
+
+def test_mock_output_is_labeled(monkeypatch):
+    monkeypatch.setattr("app.advisor.service.search_similar_chunks", lambda **kwargs: [make_result()])
+    monkeypatch.setattr("app.retrieval.vector_search.search_similar_chunks", lambda **kwargs: [make_result()])
+    server, sink = build(config=settings.model_copy(update={"llm_provider": "mock"}))
+
+    result = call(server, "ask_advisor", {"question": "Key risks?"})
+
+    assert result.is_error is False
+    assert result.content[0].text.startswith("MOCK OUTPUT:")
+    assert result.meta["eaia/mock"] is True
+    assert result.structured_content["answer"]
+    assert sink.records[-1].provider == "mock"
+
+
+@pytest.mark.parametrize("arguments", [{"question": "Key risks?", "llm_provider": "mock"}, {"question": "Key risks?"}])
+def test_mock_is_denied_unless_the_server_runs_in_mock_mode(arguments, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.advisor.service.search_similar_chunks", lambda **kwargs: calls.append(1) or [])
+    config = settings.model_copy(update={"llm_provider": "openai"})
+    policy = ModelPolicy({"mock": frozenset({"mock"}), "openai": frozenset({"gpt-x"})})
+    server, sink = build(config=config, model_policy=policy)
+
+    result = call(server, "ask_advisor", {**arguments, "llm_provider": "mock"})
+
+    assert result.is_error is True
+    assert "LLM_PROVIDER=mock" in result.content[0].text
+    assert sink.records[-1].outcome == "denied"
+    assert calls == []
+
+
+def test_unaudited_mock_output_carries_both_labels(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.advisor.service.search_similar_chunks", lambda **kwargs: [make_result()])
+    server, _ = build(audit_sink=BrokenSink(), fallback_audit=FallbackAuditFile(tmp_path / "f.jsonl"))
+
+    result = call(server, "ask_advisor", {"question": "Key risks?", "llm_provider": "mock", "accept_unaudited": True})
+
+    texts = [block.text for block in result.content]
+    assert texts[0].startswith("UNAUDITED:") and texts[1].startswith("MOCK OUTPUT:")
+    assert result.meta["eaia/audit"]["audited"] is False and result.meta["eaia/mock"] is True

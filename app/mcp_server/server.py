@@ -253,6 +253,9 @@ class CallGuard:
                 provider = (arguments.get("llm_provider") or self.config.llm_provider or "mock").lower().strip()
                 model = arguments.get("llm_model") or default_model_for(provider, self.config)
                 record.provider, record.model = provider, model
+                if provider == "mock" and (self.config.llm_provider or "").lower().strip() != "mock":
+                    record.outcome = "denied"
+                    raise Denied("The mock provider is available only when the server runs with LLM_PROVIDER=mock.")
                 if not self.model_policy.is_allowed(provider, model):
                     record.outcome = "denied"
                     raise Denied("Model not allowed for this provider.")
@@ -292,6 +295,8 @@ class CallGuard:
 
         if failure is not None:
             raise ToolError(failure.client_text()) from None
+        if record.provider == "mock":
+            return labeled_result(result, [MOCK_NOTICE], {"eaia/mock": True})
         return result
 
     def _unaudited(
@@ -330,7 +335,8 @@ class CallGuard:
         )
         if failure is not None:
             raise ToolError(f"{failure.client_text()} {UNAUDITED_NOTICE}") from None
-        return unaudited_result(result, record.correlation_id)
+        notices = [MOCK_NOTICE] if record.provider == "mock" else []
+        return unaudited_result(result, record.correlation_id, notices)
 
     def _refusal_text(self, record: AuditRecord) -> str:
         message = "The call was blocked because it could not be written to the audit log."
@@ -362,8 +368,26 @@ class CallGuard:
 UNAUDITED_NOTICE = "UNAUDITED: this response has no audit log record. The override was recorded in the fallback audit file."
 
 
-def unaudited_result(result: Any, correlation_id: UUID) -> CallToolResult:
+MOCK_NOTICE = (
+    "MOCK OUTPUT: produced by the mock provider for development and testing. No language model read the "
+    "evidence. Do not use this output for decisions."
+)
+
+
+def unaudited_result(result: Any, correlation_id: UUID, notices: list[str] | None = None) -> CallToolResult:
     """Wrap a tool result so the client sees, in text and in _meta, that it was not audited."""
+    labeled = labeled_result(
+        result,
+        [f"{UNAUDITED_NOTICE} Reference: {correlation_id}", *(notices or [])],
+        {"eaia/audit": {"audited": False, "reference": str(correlation_id)}},
+    )
+    if notices and MOCK_NOTICE in notices:
+        labeled.meta["eaia/mock"] = True
+    return labeled
+
+
+def labeled_result(result: Any, notices: list[str], meta: dict[str, Any]) -> CallToolResult:
+    """Return the result with notice text blocks first and machine-readable flags in _meta."""
     if isinstance(result, BaseModel):
         structured = result.model_dump(mode="json", by_alias=True)
         body = result.model_dump_json(indent=2, by_alias=True)
@@ -371,12 +395,9 @@ def unaudited_result(result: Any, correlation_id: UUID) -> CallToolResult:
         structured = None
         body = str(result)
     return CallToolResult(
-        content=[
-            TextContent(type="text", text=f"{UNAUDITED_NOTICE} Reference: {correlation_id}"),
-            TextContent(type="text", text=body),
-        ],
+        content=[*(TextContent(type="text", text=notice) for notice in notices), TextContent(type="text", text=body)],
         structured_content=structured,
-        _meta={"eaia/audit": {"audited": False, "reference": str(correlation_id)}},
+        _meta=meta,
     )
 
 
