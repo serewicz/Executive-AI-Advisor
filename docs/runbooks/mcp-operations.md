@@ -13,6 +13,10 @@ Runbook for operators of the Executive AI Advisor MCP server. Design and reasons
 | `MCP_RATE_LIMIT_LLM_PER_MINUTE` | `10` | Per client: tools that call a model. |
 | `MCP_RATE_LIMIT_LLM_PER_DAY` | `200` | Per client, rolling 24 hours. |
 | `MCP_AUDIT_STORE_TEXT` | `false` | Store `query`, `question`, `meeting_focus` text in the audit log instead of a hash and length. |
+| `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE` | `true` | Allow `accept_unaudited=true` on tools when the audit table cannot be written. `false`: block with no override. |
+| `MCP_AUDIT_FALLBACK_FILE` | `data/audit/mcp_audit_fallback.jsonl` | Append-only file for overrides and refusals during an audit outage. |
+| `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:11434/v1` | OpenAI-compatible endpoint for provider `local`. |
+| `LOCAL_LLM_MODEL` | `llama3.2:3b` | Default model for provider `local`. |
 
 Restart the server after any change. Settings are read at startup.
 
@@ -102,7 +106,37 @@ WHERE arguments -> 'question' ->> 'sha256' = encode(sha256(convert_to('<exact qu
 
 ### Audit write failures
 
-Audit writes fail open: the tool result is returned and the record is logged at ERROR on `eaia.mcp.audit` with the message `Audit write failed`. Alert on that message. Every record is also logged at INFO on the same logger, so a log pipeline can rebuild missing rows.
+Audit writes fail closed. Design: ADR 0001 section 6.1.
+
+What the user sees:
+
+1. A tool call returns `The call was blocked because it could not be written to the audit log.`, the override instruction, and `Reference: <uuid>`. Resources and prompts return the block message with no override.
+2. If the user still wants the answer, the client calls the same tool again with `accept_unaudited=true`.
+3. The server tries the table again. If it works, the row is normal and `detail` is `accept_unaudited requested`.
+4. If it fails again, the server writes an `unaudited_override` line to the fallback file and returns the answer. The text starts with `UNAUDITED:` and `_meta["eaia/audit"].audited` is `false`.
+5. If the fallback file cannot be written either, the call is blocked with `the audit log and the fallback audit file are both unavailable`.
+
+Alert on the ERROR message `Audit write failed` on logger `eaia.mcp.audit`. Every record is also logged at INFO on that logger.
+
+Respond:
+
+1. Find the database error class in the server log or in the `audit_db_error_class` field of the fallback file (for example `OperationalError`: connection; `InternalError` with "read-only transaction": a replica or read-only setting; `InsufficientPrivilege`: the role lost `INSERT`).
+2. Fix the database. Confirm with one tool call that returns normally.
+3. To stop all results until the database is fixed, set `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false` and restart.
+
+Reconcile the fallback file after an outage:
+
+```bash
+# What happened during the outage
+jq -r '[.logged_at, .event, .client_id, .name, .outcome, .correlation_id] | @tsv' data/audit/mcp_audit_fallback.jsonl
+
+# Overrides only
+jq -c 'select(.event == "unaudited_override")' data/audit/mcp_audit_fallback.jsonl
+```
+
+Each line has the same redacted fields as a table row. `audit_refused` lines are calls that returned no data. `unaudited_override` lines are calls that returned data with no table row. Keep the file with your audit records; the application does not import it into the table, because a later insert would carry the wrong trust level for an append-only log. To start a new file, stop the server, move the file to archive storage, and restart. The server creates a new file with mode `0600`.
+
+Keep the file on a disk the server user can write and other users cannot read. The directory `data/audit/` is in `.gitignore`.
 
 ## Least-privilege database role
 
@@ -151,13 +185,14 @@ python -m app.mcp_server --transport streamable-http --host 127.0.0.1 --port 876
 
 Do not rely on the proxy alone for authentication; keep `MCP_AUTH_TOKENS` set.
 
-## Model allowlist
+## Model list
 
 ```bash
 cp config/models.example.yaml config/models.yaml
+python -m app.mcp_server.model_policy config/models.yaml
 ```
 
-Edit `allowed_models` per provider and restart. The server refuses to start on an unknown provider, an empty list, or invalid YAML. A provider's configured default model (for example `OPENAI_CHAT_MODEL`) must be in its list, or calls that omit `llm_model` are denied.
+The server refuses to start on an unknown provider, an empty list, an unknown key, invalid YAML, or a `local` `base_url` that does not match `LOCAL_LLM_BASE_URL`. A provider's default model (for example `OPENAI_CHAT_MODEL`) must be in its list, or calls that omit `llm_model` are denied; the check command warns about this. To add, retire, or localize models: [Updating the model list](updating-model-list.md).
 
 ## Rate-limit tuning
 

@@ -2,7 +2,7 @@
 
 Status: Accepted, pending review. Tracking issue: #23. Order: 1 of 3. ADR 0002 (#24) and ADR 0003 (#25) build on it.
 
-Date: 2026-10-25
+Date: 2026-10-25. Revised 2026-10-25: audit failure changed from fail open to fail closed with an explicit override (section 6.1); the model allowlist became a dated model list with a local provider (section 2).
 
 This record describes the design as built. Section "Changes from the draft" lists where the implementation differs from the version attached to #23.
 
@@ -52,12 +52,17 @@ Alternatives considered:
 ### 2. Model allowlist
 
 ```yaml
-# config/models.yaml (shared with ADR 0002)
+# config/models.yaml (shared with ADR 0002). Abbreviated; see config/models.example.yaml.
+as_of: "2026-10-25"
 providers:
-  openai:   { allowed_models: [gpt-4o-mini] }
-  anthropic: { allowed_models: [claude-3-5-sonnet-latest] }
-  grok:     { allowed_models: [grok-4.3] }
-  mock:     { allowed_models: [mock] }
+  openai:
+    models:
+      - id: gpt-6-luna
+        notes: Lowest-cost current model.
+  local:
+    base_url: http://127.0.0.1:11434/v1
+    models:
+      - id: llama3.2:3b
 ```
 
 Every LLM-backed tool resolves the provider (argument or `LLM_PROVIDER`) and the model (argument or the provider's configured default), then checks the pair against the allowlist before any retrieval or provider call. Unknown pair → `Model not allowed for this provider.`, audited as `denied`. The default model must also be listed, so a config change cannot route around the list.
@@ -67,6 +72,20 @@ Every LLM-backed tool resolves the provider (argument or `LLM_PROVIDER`) and the
 - Scope: MCP only. The REST API and Streamlit UI still accept any model name. ADR 0002 moves the check into the shared service layer.
 
 ADR 0002 turns this file into the routing policy; this ADR adds only the allowlist.
+
+The file is a list of current models, not only a list of names:
+
+- Each entry has an `id` and optional `notes` (cost tier, intended use). Unknown keys are rejected, so a typo such as `modle:` fails at startup instead of being ignored.
+- `as_of` records the date someone last checked the IDs against the providers' model pages. Providers retire models on their own schedules (the previous default `claude-3-5-sonnet-latest` was retired by its provider before this revision). The date tells the next reader how stale the list may be.
+- The older `allowed_models: [...]` form still loads, so existing files keep working.
+- `python -m app.mcp_server.model_policy [path]` validates a file without starting the server and warns when a provider's environment default is missing from its list.
+- The procedure for changing the list is in `docs/runbooks/updating-model-list.md`.
+
+Local models. The ability to change vendors, or to run without one, is a design requirement: per-token prices and model availability are set by vendors and can change with little notice. A `local` provider talks to any OpenAI-compatible server (Ollama, llama.cpp server, vLLM) at `LOCAL_LLM_BASE_URL`. It reuses the OpenAI provider class and changes only the endpoint, key, and default model, so it adds about 25 lines. If the policy file sets `providers.local.base_url`, it must equal `LOCAL_LLM_BASE_URL` or the server refuses to start. This pins the endpoint an operator approved, so a changed environment variable cannot send evidence to a different host without a matching change to the reviewed file. Routing and fallback between providers stay in ADR 0002 (#24).
+
+Alternatives considered for the local path:
+- *Point `OPENAI_BASE_URL` at the local server.* Works with no code, but replaces OpenAI rather than adding a provider, and the audit log would record `openai` for calls that never left the network. Rejected.
+- *A provider plugin system.* More than this change needs. Rejected until ADR 0002 shows a need.
 
 Alternative: remove `llm_model` from MCP entirely. Rejected because model choice per task is a real need (cheap model for search summaries, stronger model for diligence); the fix is governance, not removal.
 
@@ -116,11 +135,49 @@ New table `mcp_audit_events` (Alembic migration after `20260608_0007`):
 | duration_ms | int | |
 | provider, model | text null | resolved provider and model for LLM tools |
 | request_id | uuid null | reserved for the ADR 0003 ledger |
-| detail | text null | reserved for operator notes; not written by the server |
+| detail | text null | set when the caller passed `accept_unaudited` (section 6.1) |
 
 Append-only: the migration adds triggers that reject `UPDATE`, `DELETE`, and `TRUNCATE` on the table for every role. Grants alone were not enough, because the app role runs migrations and owns the table, and an owner can grant itself anything. A table owner can still disable the triggers. For tamper resistance against the app credentials themselves, run the MCP server with a separate role that has `INSERT, SELECT` only; the runbook has the SQL. Retention runs as the owner and disables the trigger inside one transaction.
 
-Writes: each record is written in its own session and transaction, so a failed tool call still produces a row. Writes fail open: if the insert fails, the tool result is returned and the record is logged as JSON at ERROR on logger `eaia.mcp.audit`. Every record is also logged at INFO on the same logger, which gives a second copy for log shipping.
+Writes: each record is written in its own session and transaction, so a failed tool call still produces a row. The write happens after the operation, so the row holds the outcome and duration. Every record is also logged at INFO on logger `eaia.mcp.audit`, which gives a second copy for log shipping. Section 6.1 covers what happens when the write fails.
+
+#### 6.1 Audit write failure: fail closed, with an explicit override
+
+The first version failed open: if the insert failed, the result went back to the client and the gap was noted in the log. It was changed after review. The owner's position is that a call the system cannot account for should not return data by default, and that the person asking should decide whether an unaudited answer is acceptable.
+
+Behavior:
+
+1. The operation runs, then the audit row is written.
+2. If the write succeeds, the result (or error) is returned as before.
+3. If the write fails, the result is withheld. The client gets `The call was blocked because it could not be written to the audit log.` plus a reference ID and, for tools, the instruction to call again with `accept_unaudited=true` if the answer is still wanted. The database error text is never sent. A line with event `audit_refused` is appended to the fallback file (below).
+4. A call with `accept_unaudited=true` is a new call. It runs the operation and tries the audit table again. If the table write succeeds, the row is normal and `detail` records that the override was requested. Nothing else changes.
+5. If the table write fails again, the server appends an `unaudited_override` line to the fallback file. Only after that line is written (with `fsync`) does the result go back. The result's first text block starts with `UNAUDITED:` and the reference ID, and `_meta["eaia/audit"]` is `{"audited": false, "reference": "<id>"}` so clients can detect it without parsing text. Structured content is unchanged.
+6. If the fallback file also cannot be written, the override is refused. There is then no durable record of the override, so the answer is not returned.
+7. If the operation itself failed (for example, the model was denied), the override returns that error with the `UNAUDITED` notice. No data leaves, so there is nothing to withhold.
+
+Scope: the override exists for tools only. Resources and prompts fail closed with no override. MCP resources and prompts do not take extra arguments in a way clients present to users, and neither carries a cost that a retry would repeat.
+
+Settings:
+- `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE` (default `true`). `false` makes every audit failure a hard failure. Use `false` where policy says no record, no answer.
+- `MCP_AUDIT_FALLBACK_FILE` (default `data/audit/mcp_audit_fallback.jsonl`). JSON Lines, opened with `O_APPEND`, mode `0600`, `fsync` on every line. The application never truncates it. Each line holds the same redacted fields as the table plus `event`, `logged_at`, and the class name of the database error. Operators reconcile it after an outage (runbook).
+
+Why the override is an argument and not a server prompt: MCP has an elicitation feature that lets a server ask the user a question mid-call. Client support is uneven, and a call that waits on a person holds a model response open. An argument is visible in the client's tool-call display, works with every client, and lands in the audit record. The tool description tells the calling model to leave it false unless the user asked.
+
+Alternatives considered:
+
+| Option | Why not chosen |
+|---|---|
+| Fail open (first version) | Returns data the system cannot account for. Owner rejected it. |
+| Fail closed, no override | Simple and strict. Available with `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false`. Not the default because a database outage would stop all work, including a user who accepts the gap. |
+| Write the audit row before the operation | Catches a down database before a paid model call. Needs a second row or an update to record the outcome, and the table is append-only. Kept as a follow-up if cost waste on refused calls shows up in practice. |
+| Cache the refused result and return it on override | Avoids a second model call. Holds sensitive output in memory keyed by an ID that becomes a bearer credential for that result. Rejected. |
+| Fallback to log lines only | Logs rotate and are not guaranteed durable at the moment of return. The fallback file is synced before the answer goes out. |
+
+Risks:
+- A refused LLM call has already spent tokens, and the override spends them again. The rate limiter counts both calls. Expect this cost only during a database outage.
+- The fallback file is on local disk. It is not tamper-evident; a user with shell access to the host can edit it. It is evidence of overrides, not proof. Ship it to log storage if that matters.
+- A caller model could set `accept_unaudited=true` on its own. The field description says not to, the value appears in the client's tool-call view, and every use is recorded. If that is not enough, set the override off.
+- The fallback file grows during an outage and is never rotated by the application. The runbook covers rotation.
 
 Resources and prompts are audited with `kind` = `resource` or `prompt`. A read-only MCP resource `eaia://audit/recent` is not added; audit data is for operators, not for the model.
 
@@ -137,7 +194,8 @@ Alternative: structured log lines only. Rejected as the sole store: logs rotate 
 | Prompt injection in documents causing tool misuse | Tools are read-only; no write or network tools; audit trail for review |
 | Sensitive text in audit log | Query/question hashed by default |
 | Audit tampering | Append-only triggers; optional least-privilege role |
-| Audit outage hides calls | Fail-open with ERROR log containing the full record |
+| Audit outage hides calls | Fail closed. Results are withheld unless the caller overrides; each override is written to a synced fallback file first |
+| Caller model overrides audit without the user asking | Override visible in the tool call; recorded in table or fallback file; can be turned off |
 
 ## Acceptance criteria
 
@@ -149,8 +207,12 @@ Alternative: structured log lines only. Rejected as the sole store: logs rotate 
 6. The 11th LLM-tool call within a minute from one client is rejected; read-only tools are unaffected.
 7. Every tool call, including failures and rejections, writes one `mcp_audit_events` row; the app DB role cannot update or delete rows.
 8. Existing 184 tests pass.
+9. When the audit write fails, a tool call returns no data, and the message names `accept_unaudited=true` and a reference ID.
+10. A call with `accept_unaudited=true` retries the table; on a second failure it writes an `unaudited_override` line to the fallback file before returning a result marked `UNAUDITED` in text and `_meta`.
+11. With `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false`, or when the fallback file cannot be written, the override is refused.
+12. Resources and prompts have no override.
 
-All eight are covered by tests in `tests/test_mcp_hardening.py` and `tests/test_mcp_audit_postgres.py`. The Postgres tests run when `EAIA_PG_INTEGRATION_URL` is set; CI does not set it yet (see Follow-ups).
+All twelve are covered by tests in `tests/test_mcp_hardening.py` and `tests/test_mcp_audit_postgres.py`. The Postgres tests run when `EAIA_PG_INTEGRATION_URL` is set; CI does not set it yet (see Follow-ups).
 
 ## Test plan
 
@@ -171,14 +233,15 @@ All eight are covered by tests in `tests/test_mcp_hardening.py` and `tests/test_
 - Ship behind defaults that are safe: stdio unaffected; HTTP on loopback unaffected; HTTP on other hosts requires tokens. CHANGELOG notes the breaking change for anyone binding 0.0.0.0.
 - Risk: in-process rate limiter resets on restart and is per-instance. Acceptable for current single-instance use; documented.
 - Risk: audit writes add latency. Write is a single insert in its own transaction; not yet measured under load.
-- Risk: fail-open audit means a database outage leaves gaps in the table. The ERROR log line holds the full record, so gaps can be rebuilt from logs.
+- Risk: fail-closed audit means a database outage blocks results until the caller overrides or the database returns. This is the intended trade (section 6.1).
 
 ## Changes from the draft
 
 | Draft | Built | Reason |
 |---|---|---|
 | Append-only through grants | Triggers, plus optional `INSERT, SELECT` role | The app role owns the table, so grants do not bind it |
-| Audit failure behavior unstated | Fail open, ERROR log with the full record | An audit outage should not take down read-only tools; the log keeps the record |
+| Audit failure behavior unstated | Fail closed, with an explicit `accept_unaudited` override recorded in a fallback file | First built as fail open; changed after owner review (section 6.1) |
+| Allowlist of model names | Dated model list with notes, a `local` provider, and a validation command | Makes the list easy to keep current and keeps a no-vendor option |
 | Allowlist for the server | Allowlist for MCP only | Keeps this change inside the MCP layer; ADR 0002 moves it to the service layer |
 | `provider`/`model` filled by ADR 0002 | Filled now for LLM tools | The allowlist already resolves both |
 | Custom auth middleware implied | MCP SDK bearer middleware with a static verifier | Less code, standard 401 behavior, path to OAuth |

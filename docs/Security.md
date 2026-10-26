@@ -55,11 +55,13 @@ The MCP server (`python -m app.mcp_server`) exposes read-only tools, some of whi
 | Disclosure through errors | Clients get fixed messages and a reference ID; detail stays in server logs |
 | Prompt injection in documents | Tools are read-only; no write or network tools; every call is audited |
 | Sensitive text in the audit log | `query`, `question`, `meeting_focus` stored as hash and length by default |
+| Calls go unrecorded during a database outage | Fail closed: results are withheld. A tool caller can re-call with `accept_unaudited=true`; the override is synced to an append-only fallback file before the result, marked `UNAUDITED`, is returned. `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false` removes the override |
+| Evidence sent to an unapproved model host | Provider `local` must match the `base_url` in `config/models.yaml` or the server does not start |
 | Audit tampering | Triggers block UPDATE, DELETE, TRUNCATE; run the server as a non-owner role for stronger protection |
 
 Configuration and procedures: [MCP operations runbook](runbooks/mcp-operations.md).
 
-Known limits: rate limits are in memory per process; audit writes fail open with an ERROR log; the model allowlist applies to MCP, not yet to the REST API or Streamlit UI.
+Known limits: rate limits are in memory per process; an audit outage stops results until the database returns or the caller overrides; a refused model call has already spent tokens and an override spends them again; the fallback file is local and not tamper-evident; the model allowlist applies to MCP, not yet to the REST API or Streamlit UI.
 
 ## AI Incident Response and Board Escalation
 
