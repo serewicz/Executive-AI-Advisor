@@ -5,8 +5,11 @@ Free text (``query``, ``question``, ``meeting_focus``) is stored as a SHA-256
 hash plus length unless ``MCP_AUDIT_STORE_TEXT=true``, so the audit table does
 not become a second copy of sensitive questions.
 
-Recording fails open: if the write fails, the call still returns and the
-failure is logged at ERROR with the correlation ID. The rationale is in ADR 0001.
+Recording fails closed. ``CallGuard`` withholds a result it could not audit.
+A caller may re-call a tool with ``accept_unaudited=true``; if the database
+write fails again, the override is recorded in ``FallbackAuditFile`` (an
+append-only JSON Lines file) before the result is returned. The rationale is in
+ADR 0001.
 """
 
 from __future__ import annotations
@@ -14,8 +17,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -89,8 +95,16 @@ class DatabaseAuditSink:
             session.close()
 
 
-class FailOpenAuditSink:
-    """Wraps a sink. Emits a structured log line for every record and never raises."""
+class AuditWriteError(RuntimeError):
+    """The audit record could not be written. The cause is chained, never sent to clients."""
+
+
+class LoggingAuditSink:
+    """Wraps a sink. Emits a structured log line for every record, then writes to the inner sink.
+
+    Any failure in the inner sink is raised as ``AuditWriteError`` so ``CallGuard``
+    can withhold the result (fail closed).
+    """
 
     def __init__(self, inner: AuditSink) -> None:
         self._inner = inner
@@ -111,5 +125,44 @@ class FailOpenAuditSink:
         )
         try:
             self._inner.write(record)
-        except Exception:  # noqa: BLE001 - audit failure must not change the tool result
-            logger.exception("Audit write failed. correlation_id=%s", record.correlation_id)
+        except Exception as exc:  # noqa: BLE001 - any sink failure means the call is not audited
+            logger.error(
+                "Audit write failed. correlation_id=%s error_class=%s", record.correlation_id, type(exc).__name__
+            )
+            raise AuditWriteError("audit write failed") from exc
+
+
+class FallbackAuditFile:
+    """Append-only JSON Lines file used when the audit table cannot be written.
+
+    One line per event. Lines are written with O_APPEND and fsync so a crash
+    after ``append`` returns does not lose the line. The file holds the same
+    redacted fields as the table plus an ``event`` name:
+
+    - ``audit_refused``: the call was blocked because the table write failed.
+    - ``unaudited_override``: the caller accepted an unaudited result.
+
+    Operators reconcile this file into ``mcp_audit_events`` after an outage
+    (see docs/runbooks/mcp-operations.md). The application never truncates it.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    def append(self, event: str, record: AuditRecord, db_error_class: str | None) -> None:
+        payload = {key: value for key, value in asdict(record).items()}
+        payload.update(
+            {
+                "event": event,
+                "logged_at": datetime.now(UTC).isoformat(),
+                "audit_db_error_class": db_error_class,
+            }
+        )
+        line = json.dumps(payload, default=str, sort_keys=True) + "\n"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, line.encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)

@@ -9,6 +9,7 @@ from mcp import Client
 from app.diligence.service import DiligenceDocumentSetNotFoundError
 from app.mcp_server import create_server
 from app.mcp_server.__main__ import main
+from app.mcp_server.audit import MemoryAuditSink
 from app.retrieval.vector_search import SearchResult
 
 EXPECTED_TOOLS = {
@@ -52,6 +53,11 @@ def make_result(content="The platform has a single engineer who owns all product
     )
 
 
+def make_server(session_factory):
+    # These tests cover tool behavior, not the audit table, so audit goes to memory.
+    return create_server(session_factory, audit_sink=MemoryAuditSink())
+
+
 def run_client(server, scenario):
     async def _run():
         async with Client(server) as client:
@@ -61,7 +67,7 @@ def run_client(server, scenario):
 
 
 def test_server_exposes_expected_tools_with_structured_output():
-    tools = run_client(create_server(FakeSession), lambda c: c.list_tools()).tools
+    tools = run_client(make_server(FakeSession), lambda c: c.list_tools()).tools
 
     assert {tool.name for tool in tools} == EXPECTED_TOOLS
     for tool in tools:
@@ -71,7 +77,7 @@ def test_server_exposes_expected_tools_with_structured_output():
 
 
 def test_tools_never_accept_provider_api_keys():
-    tools = run_client(create_server(FakeSession), lambda c: c.list_tools()).tools
+    tools = run_client(make_server(FakeSession), lambda c: c.list_tools()).tools
 
     for tool in tools:
         assert "llm_api_key" not in tool.input_schema.get("properties", {})
@@ -82,7 +88,7 @@ def test_ask_advisor_reuses_service_and_returns_citations(monkeypatch):
     session = FakeSession()
 
     result = run_client(
-        create_server(lambda: session),
+        make_server(lambda: session),
         lambda c: c.call_tool(
             "ask_advisor",
             {"question": "What key-person risk exists?", "llm_provider": "mock"},
@@ -108,7 +114,7 @@ def test_search_evidence_returns_excerpts(monkeypatch):
     document_set_id = uuid4()
 
     result = run_client(
-        create_server(FakeSession),
+        make_server(FakeSession),
         lambda c: c.call_tool(
             "search_evidence",
             {"query": "deployment ownership", "document_set_id": str(document_set_id), "top_k": 3},
@@ -130,7 +136,7 @@ def test_assessment_tool_maps_not_found_to_tool_error(monkeypatch):
     monkeypatch.setattr("app.executive.service.generate_board_brief", missing)
 
     result = run_client(
-        create_server(FakeSession),
+        make_server(FakeSession),
         lambda c: c.call_tool("board_brief", {"document_set_id": str(uuid4())}),
     )
 
@@ -140,7 +146,7 @@ def test_assessment_tool_maps_not_found_to_tool_error(monkeypatch):
 
 def test_invalid_arguments_are_rejected():
     result = run_client(
-        create_server(FakeSession),
+        make_server(FakeSession),
         lambda c: c.call_tool("hundred_day_plan", {"document_set_id": "not-a-uuid"}),
     )
 
@@ -155,7 +161,7 @@ def test_resources_and_prompts_are_listed():
         prompt = await client.get_prompt("board_meeting_prep", {"document_set_id": "abc"})
         return resources, templates, prompts, prompt
 
-    resources, templates, prompts, prompt = run_client(create_server(FakeSession), scenario)
+    resources, templates, prompts, prompt = run_client(make_server(FakeSession), scenario)
 
     assert [str(r.uri) for r in resources.resources] == ["eaia://investigations"]
     assert [t.uri_template for t in templates.resource_templates] == ["eaia://investigations/{document_set_id}"]
@@ -168,7 +174,7 @@ def test_investigation_resource_reports_missing_set():
 
     with pytest.raises(BaseException) as exc_info:
         run_client(
-            create_server(FakeSession),
+            make_server(FakeSession),
             lambda c: c.read_resource(f"eaia://investigations/{uuid4()}"),
         )
 

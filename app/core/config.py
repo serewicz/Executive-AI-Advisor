@@ -18,9 +18,9 @@ class Settings(BaseSettings):
     max_upload_mb: int = Field(default=25, alias="MAX_UPLOAD_MB")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     llm_provider: str = Field(default="mock", alias="LLM_PROVIDER")
-    openai_chat_model: str = Field(default="gpt-4o-mini", alias="OPENAI_CHAT_MODEL")
+    openai_chat_model: str = Field(default="gpt-6-luna", alias="OPENAI_CHAT_MODEL")
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
-    anthropic_chat_model: str = Field(default="claude-3-5-sonnet-latest", alias="ANTHROPIC_CHAT_MODEL")
+    anthropic_chat_model: str = Field(default="claude-haiku-5-5", alias="ANTHROPIC_CHAT_MODEL")
     xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
     xai_chat_model: str = Field(default="grok-4.3", alias="XAI_CHAT_MODEL")
     llm_temperature: float = Field(default=0.2, alias="LLM_TEMPERATURE")
@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     mcp_rate_limit_llm_per_minute: int = Field(default=10, ge=1, alias="MCP_RATE_LIMIT_LLM_PER_MINUTE")
     mcp_rate_limit_llm_per_day: int = Field(default=200, ge=1, alias="MCP_RATE_LIMIT_LLM_PER_DAY")
     mcp_audit_store_text: bool = Field(default=False, alias="MCP_AUDIT_STORE_TEXT")
+    # Fail-closed audit (ADR 0001). false = no override; an unaudited call always fails.
+    mcp_audit_allow_unaudited_override: bool = Field(default=True, alias="MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE")
+    mcp_audit_fallback_file: Path = Field(
+        default=Path("data/audit/mcp_audit_fallback.jsonl"), alias="MCP_AUDIT_FALLBACK_FILE"
+    )
+    # Local OpenAI-compatible endpoint (Ollama, llama.cpp server, vLLM). See docs/runbooks/updating-model-list.md.
+    local_llm_base_url: str = Field(default="http://127.0.0.1:11434/v1", alias="LOCAL_LLM_BASE_URL")
+    local_llm_model: str = Field(default="llama3.2:3b", alias="LOCAL_LLM_MODEL")
+    local_llm_api_key: str | None = Field(default=None, alias="LOCAL_LLM_API_KEY")
 
     model_config = SettingsConfigDict(
         env_file=".env",

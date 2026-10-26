@@ -29,7 +29,7 @@ from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ResourceError, ToolError
-from mcp.types import ToolAnnotations
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -44,7 +44,7 @@ from app.advisor.schemas import (
 from app.compliance import cra_service
 from app.compliance.cra_schemas import CRAReadinessResponse
 from app.core.config import Settings, settings
-from app.core.errors import Denied, Internal, InvalidInput, NotFound, ProviderUnavailable, PublicError, RateLimited
+from app.core.errors import AuditUnavailable, Denied, Internal, InvalidInput, NotFound, ProviderUnavailable, PublicError, RateLimited
 from app.diligence import service as diligence_service
 from app.diligence.schemas import TechnologyDiligenceReport
 from app.executive import service as executive_service
@@ -57,7 +57,15 @@ from app.executive.schemas import (
 from app.governance import ai_knowledge_service
 from app.governance.ai_knowledge_schemas import AIKnowledgeGovernanceResponse
 from app.ingestion.embeddings.base import EmbeddingError
-from app.mcp_server.audit import AuditRecord, AuditSink, DatabaseAuditSink, FailOpenAuditSink, redact_arguments
+from app.mcp_server.audit import (
+    AuditRecord,
+    AuditSink,
+    AuditWriteError,
+    DatabaseAuditSink,
+    FallbackAuditFile,
+    LoggingAuditSink,
+    redact_arguments,
+)
 from app.mcp_server.model_policy import ModelPolicy, load_model_policy
 from app.mcp_server.rate_limit import LimitPolicy, RateLimiter
 from app.planning.schemas import HundredDayPlanResponse, PlanType
@@ -94,9 +102,18 @@ DocumentSetId = Annotated[UUID, Field(description="Investigation (document set) 
 TopK = Annotated[int, Field(ge=1, le=50, description="Number of evidence chunks to retrieve per query.")]
 Provider = Annotated[
     LLMProviderName | None,
-    Field(description="LLM provider override (mock, openai, anthropic, grok). Defaults to LLM_PROVIDER."),
+    Field(description="LLM provider override (mock, openai, anthropic, grok, local). Defaults to LLM_PROVIDER."),
 ]
 Model = Annotated[str | None, Field(max_length=120, description="Optional model name override for the provider.")]
+AcceptUnaudited = Annotated[
+    bool,
+    Field(
+        description=(
+            "Leave false. Set true only after a call was blocked because it could not be audited and the user "
+            "still wants the answer. The answer is then returned marked UNAUDITED."
+        )
+    ),
+]
 
 # Domain errors whose messages are string literals in this codebase. Their text
 # is safe to return. tests/test_mcp_hardening.py enforces the literal rule.
@@ -140,6 +157,7 @@ def default_model_for(provider: str, config: Settings) -> str:
         "openai": config.openai_chat_model,
         "anthropic": config.anthropic_chat_model,
         "grok": config.xai_chat_model,
+        "local": config.local_llm_model,
     }.get(provider, "")
 
 
@@ -154,8 +172,10 @@ class CallGuard:
         rate_limiter: RateLimiter,
         model_policy: ModelPolicy,
         config: Settings,
+        fallback: FallbackAuditFile | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        self.fallback = fallback
         self.transport = transport
         self.audit_sink = audit_sink
         self.rate_limiter = rate_limiter
@@ -180,7 +200,9 @@ class CallGuard:
         operation: Callable[[], T],
         policy: str,
         uses_model: bool = False,
-    ) -> T:
+    ) -> T | CallToolResult:
+        arguments = dict(arguments)
+        accept_unaudited = bool(arguments.pop("accept_unaudited", False))
         correlation_id = uuid4()
         client_id = self.client_id()
         started = self._clock()
@@ -193,6 +215,10 @@ class CallGuard:
             arguments=redact_arguments(arguments, self.config.mcp_audit_store_text),
             document_set_id=arguments.get("document_set_id"),
         )
+        if accept_unaudited:
+            record.detail = "accept_unaudited requested"
+        failure: PublicError | None = None
+        result: Any = None
         try:
             decision = self.rate_limiter.check(client_id, policy)
             if not decision.allowed:
@@ -207,20 +233,105 @@ class CallGuard:
                     raise Denied("Model not allowed for this provider.")
             result = operation()
         except Exception as exc:  # noqa: BLE001 - every failure is mapped and audited
-            public = to_public_error(exc, correlation_id)
+            failure = to_public_error(exc, correlation_id)
             if record.outcome == "ok":
                 record.outcome = "error"
             record.error_class = type(exc).__name__
-            if isinstance(public, (Internal, ProviderUnavailable)):
+            if isinstance(failure, (Internal, ProviderUnavailable)):
                 logger.exception("MCP %s %s failed. correlation_id=%s", kind, name, correlation_id)
-            self._finish(record, started)
-            raise ToolError(public.client_text()) from None
-        self._finish(record, started)
+
+        record.duration_ms = int((self._clock() - started) * 1000)
+        try:
+            self.audit_sink.write(record)
+        except AuditWriteError as exc:
+            return self._unaudited(record, failure, result, accept_unaudited, exc)
+
+        if failure is not None:
+            raise ToolError(failure.client_text()) from None
         return result
 
-    def _finish(self, record: AuditRecord, started: float) -> None:
-        record.duration_ms = int((self._clock() - started) * 1000)
-        self.audit_sink.write(record)
+    def _unaudited(
+        self,
+        record: AuditRecord,
+        failure: PublicError | None,
+        result: Any,
+        accept_unaudited: bool,
+        exc: AuditWriteError,
+    ) -> Any:
+        """Fail closed. Return a result only on an explicit, permitted, durably recorded override."""
+        db_error_class = type(exc.__cause__).__name__ if exc.__cause__ else None
+        override_allowed = (
+            accept_unaudited and record.kind == "tool" and self.config.mcp_audit_allow_unaudited_override
+        )
+        if not override_allowed:
+            # Best effort: leave a trace of the refusal. The call is refused either way.
+            self._append_fallback("audit_refused", record, db_error_class)
+            raise ToolError(self._refusal_text(record)) from None
+
+        record.detail = "accept_unaudited override; result returned without a database audit record"
+        if not self._append_fallback("unaudited_override", record, db_error_class):
+            # Nowhere durable to record the override, so the answer is withheld.
+            raise ToolError(
+                AuditUnavailable(
+                    "The call was blocked. The audit log and the fallback audit file are both unavailable, "
+                    "so an override cannot be recorded.",
+                    record.correlation_id,
+                ).client_text()
+            ) from None
+        logger.warning(
+            "Unaudited override accepted. correlation_id=%s client_id=%s name=%s",
+            record.correlation_id,
+            record.client_id,
+            record.name,
+        )
+        if failure is not None:
+            raise ToolError(f"{failure.client_text()} {UNAUDITED_NOTICE}") from None
+        return unaudited_result(result, record.correlation_id)
+
+    def _refusal_text(self, record: AuditRecord) -> str:
+        message = "The call was blocked because it could not be written to the audit log."
+        if record.kind == "tool" and self.config.mcp_audit_allow_unaudited_override:
+            message += (
+                " If you still want the answer, call the tool again with the same arguments and "
+                "accept_unaudited=true. The server will try the audit log again, record the override "
+                "in its fallback audit file, and mark the answer as unaudited."
+            )
+        elif record.kind == "tool":
+            message += " Overrides are disabled on this server. Try again later or contact the operator."
+        else:
+            message += f" A {record.kind} cannot be overridden. Try again later or contact the operator."
+        return AuditUnavailable(message, record.correlation_id).client_text()
+
+    def _append_fallback(self, event: str, record: AuditRecord, db_error_class: str | None) -> bool:
+        if self.fallback is None:
+            return False
+        try:
+            self.fallback.append(event, record, db_error_class)
+        except Exception:  # noqa: BLE001 - reported to the caller as "no durable record"
+            logger.exception("Fallback audit write failed. correlation_id=%s", record.correlation_id)
+            return False
+        return True
+
+
+UNAUDITED_NOTICE = "UNAUDITED: this response has no audit log record. The override was recorded in the fallback audit file."
+
+
+def unaudited_result(result: Any, correlation_id: UUID) -> CallToolResult:
+    """Wrap a tool result so the client sees, in text and in _meta, that it was not audited."""
+    if isinstance(result, BaseModel):
+        structured = result.model_dump(mode="json", by_alias=True)
+        body = result.model_dump_json(indent=2, by_alias=True)
+    else:
+        structured = None
+        body = str(result)
+    return CallToolResult(
+        content=[
+            TextContent(type="text", text=f"{UNAUDITED_NOTICE} Reference: {correlation_id}"),
+            TextContent(type="text", text=body),
+        ],
+        structured_content=structured,
+        _meta={"eaia/audit": {"audited": False, "reference": str(correlation_id)}},
+    )
 
 
 class EvidenceHit(BaseModel):
@@ -250,6 +361,7 @@ def create_server(
     token_verifier: TokenVerifier | None = None,
     public_url: str | None = None,
     config: Settings | None = None,
+    fallback_audit: FallbackAuditFile | None = None,
 ) -> MCPServer:
     """Build the Executive AI Advisor MCP server.
 
@@ -266,7 +378,8 @@ def create_server(
 
     guard = CallGuard(
         transport=transport,
-        audit_sink=FailOpenAuditSink(audit_sink or DatabaseAuditSink(session_factory)),
+        audit_sink=LoggingAuditSink(audit_sink or DatabaseAuditSink(session_factory)),
+        fallback=fallback_audit if fallback_audit is not None else FallbackAuditFile(config.mcp_audit_fallback_file),
         rate_limiter=rate_limiter
         or RateLimiter(
             {
@@ -333,9 +446,11 @@ def create_server(
     # ------------------------------------------------------------------ tools
 
     @mcp.tool(title="List investigations", annotations=READ_ONLY)
-    def list_investigations() -> DocumentSetListResponse:
+    def list_investigations(accept_unaudited: AcceptUnaudited = False) -> DocumentSetListResponse:
         """List investigation workspaces (document sets) with their document counts."""
-        return run("list_investigations", {}, document_set_service.list_document_sets)
+        return run(
+            "list_investigations", {"accept_unaudited": accept_unaudited}, document_set_service.list_document_sets
+        )
 
     @mcp.tool(title="Search evidence", annotations=READ_ONLY)
     def search_evidence(
@@ -343,6 +458,7 @@ def create_server(
         document_set_id: Annotated[UUID | None, Field(description="Limit search to one investigation.")] = None,
         document_id: Annotated[UUID | None, Field(description="Limit search to one document.")] = None,
         top_k: TopK = 5,
+        accept_unaudited: AcceptUnaudited = False,
     ) -> EvidenceSearchResult:
         """Semantic search over ingested evidence. Returns cited source excerpts without calling an LLM."""
 
@@ -370,7 +486,13 @@ def create_server(
 
         return run(
             "search_evidence",
-            {"query": query, "document_set_id": document_set_id, "document_id": document_id, "top_k": top_k},
+            {
+                "query": query,
+                "document_set_id": document_set_id,
+                "document_id": document_id,
+                "top_k": top_k,
+                "accept_unaudited": accept_unaudited,
+            },
             _search,
         )
 
@@ -382,6 +504,7 @@ def create_server(
         top_k: TopK = 5,
         llm_provider: Provider = None,
         llm_model: Model = None,
+        accept_unaudited: AcceptUnaudited = False,
     ) -> AdvisorAskResponse:
         """Answer an executive question with cited evidence, confidence, and stated limitations."""
         return run_llm(
@@ -393,6 +516,7 @@ def create_server(
                 "top_k": top_k,
                 "llm_provider": llm_provider,
                 "llm_model": llm_model,
+                "accept_unaudited": accept_unaudited,
             },
             lambda db: advisor_service.answer_executive_question(
                 question=question,
@@ -413,6 +537,7 @@ def create_server(
         top_k: TopK = 8,
         llm_provider: Provider = None,
         llm_model: Model = None,
+        accept_unaudited: AcceptUnaudited = False,
     ) -> BoardSummaryResponse:
         """Generate a cited board memo for a document or investigation."""
         return run_llm(
@@ -424,6 +549,7 @@ def create_server(
                 "top_k": top_k,
                 "llm_provider": llm_provider,
                 "llm_model": llm_model,
+                "accept_unaudited": accept_unaudited,
             },
             lambda db: advisor_service.generate_board_summary(
                 document_id=document_id,
@@ -444,6 +570,7 @@ def create_server(
             top_k: TopK = 20,
             llm_provider: Provider = None,
             llm_model: Model = None,
+            accept_unaudited: AcceptUnaudited = False,
         ):
             return run_llm(
                 name,
@@ -519,6 +646,7 @@ def create_server(
         include_100_day_plan: bool = True,
         llm_provider: Provider = None,
         llm_model: Model = None,
+        accept_unaudited: AcceptUnaudited = False,
     ) -> TechnologyDiligenceReport:
         """Full technology due diligence report with findings, risk heatmap, and optional 100-day plan."""
         return run_llm(
@@ -529,6 +657,7 @@ def create_server(
                 "include_100_day_plan": include_100_day_plan,
                 "llm_provider": llm_provider,
                 "llm_model": llm_model,
+                "accept_unaudited": accept_unaudited,
             },
             lambda db: diligence_service.generate_technology_due_diligence_report(
                 document_set_id=document_set_id,
@@ -546,6 +675,7 @@ def create_server(
         plan_type: PlanType = "growth_equity",
         llm_provider: Provider = None,
         llm_model: Model = None,
+        accept_unaudited: AcceptUnaudited = False,
     ) -> HundredDayPlanResponse:
         """Sequenced 30/60/90-day plan with owners, outcomes, dependencies, and board checkpoints."""
         return run_llm(
@@ -555,6 +685,7 @@ def create_server(
                 "plan_type": plan_type,
                 "llm_provider": llm_provider,
                 "llm_model": llm_model,
+                "accept_unaudited": accept_unaudited,
             },
             lambda db: executive_service.generate_executive_100_day_plan(
                 document_set_id=document_set_id,

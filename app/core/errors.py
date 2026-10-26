@@ -53,3 +53,9 @@ class ProviderUnavailable(PublicError):
 
 class Internal(PublicError):
     category = "internal"
+
+
+class AuditUnavailable(PublicError):
+    """The call could not be written to the audit log, so its result is withheld (ADR 0001)."""
+
+    category = "audit_unavailable"

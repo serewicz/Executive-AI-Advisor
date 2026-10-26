@@ -18,7 +18,7 @@ from app.advisor.providers.base import LLMError
 from app.core.config import settings
 from app.mcp_server import create_server
 from app.mcp_server.__main__ import main
-from app.mcp_server.audit import AuditRecord, MemoryAuditSink, redact_arguments
+from app.mcp_server.audit import AuditRecord, FallbackAuditFile, MemoryAuditSink, redact_arguments
 from app.mcp_server.auth import (
     InsecureBindError,
     StaticTokenVerifier,
@@ -28,7 +28,8 @@ from app.mcp_server.auth import (
     is_loopback_host,
     parse_token_entries,
 )
-from app.mcp_server.model_policy import ModelPolicy, ModelPolicyError, load_model_policy
+from app.mcp_server.model_policy import ModelPolicy, ModelPolicyError, env_default_gaps, load_model_policy
+from app.mcp_server.model_policy import main as model_policy_main
 from app.mcp_server.rate_limit import LimitPolicy, RateLimiter
 from app.mcp_server.tokens import main as tokens_main
 from app.retrieval.vector_search import SearchResult
@@ -324,6 +325,62 @@ def test_model_policy_rejects_invalid_files(tmp_path, content):
 def test_example_policy_file_is_valid():
     policy = load_model_policy(settings, ROOT / "config" / "models.example.yaml")
     assert policy.is_allowed("mock", "mock")
+    assert policy.as_of == "2026-10-25"
+    assert policy.is_allowed("local", "llama3.2:3b")
+    assert not policy.is_allowed("openai", "gpt-6-astra")  # commented out on purpose
+
+
+def test_model_entries_with_notes(tmp_path):
+    path = tmp_path / "models.yaml"
+    path.write_text(
+        "as_of: '2026-10-25'\nproviders:\n  openai:\n    models:\n"
+        "      - id: gpt-6-luna\n        notes: cheap\n      - id: gpt-6.1-sol\n"
+    )
+    policy = load_model_policy(settings, path)
+    assert policy.is_allowed("openai", "gpt-6.1-sol")
+    assert not policy.is_allowed("openai", "gpt-6-astra")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "providers:\n  openai:\n    models: []\n",
+        "providers:\n  openai:\n    models:\n      - id: x\n        price: 1\n",
+        "providers:\n  local:\n    base_url: http://10.0.0.5:8000/v1\n    models:\n      - id: x\n",
+    ],
+)
+def test_model_entries_reject_bad_input(tmp_path, content):
+    path = tmp_path / "models.yaml"
+    path.write_text(content)
+    with pytest.raises(ModelPolicyError):
+        load_model_policy(settings, path)
+
+
+def test_local_provider_is_routed_and_allowlisted(monkeypatch):
+    from app.advisor.providers.factory import get_llm_provider
+    from app.advisor.providers.local_provider import LocalChatProvider
+
+    get_llm_provider.cache_clear()
+    provider = get_llm_provider("local")
+    assert isinstance(provider, LocalChatProvider)
+    client = provider._client(None)
+    assert str(client.base_url).rstrip("/") == settings.local_llm_base_url.rstrip("/")
+    get_llm_provider.cache_clear()
+
+
+def test_policy_check_command(tmp_path, capsys):
+    path = tmp_path / "models.yaml"
+    path.write_text("providers:\n  openai:\n    models:\n      - id: some-other-model\n")
+    assert model_policy_main([str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "OK:" in out and "WARNING: openai: default model" in out
+    path.write_text("providers:\n  acme:\n    models:\n      - id: x\n")
+    assert model_policy_main([str(path)]) == 1
+    assert model_policy_main([str(tmp_path / "missing.yaml")]) == 1
+
+
+def test_env_default_gaps_empty_when_defaults_listed():
+    assert env_default_gaps(load_model_policy(settings, ROOT / "missing.yaml"), settings) == []
 
 
 # -------------------------------------------------------------------- error handling
@@ -503,18 +560,173 @@ def test_audit_can_store_text_when_configured():
     assert redacted == {"question": "secret plan", "top_k": 5}
 
 
-def test_audit_failure_does_not_change_tool_result(monkeypatch, caplog):
-    class BrokenSink:
-        def write(self, record: AuditRecord) -> None:
-            raise RuntimeError("database down")
+class BrokenSink:
+    def __init__(self) -> None:
+        self.attempts = 0
 
+    def write(self, record: AuditRecord) -> None:
+        self.attempts += 1
+        raise RuntimeError("database down at postgresql://eaia:hunter2@db.internal:5432/eaia")
+
+
+def empty_sets(monkeypatch):
     monkeypatch.setattr(
         "app.services.document_sets.list_document_sets", lambda db: DocumentSetListResponse(document_sets=[])
     )
-    server, _ = build(audit_sink=BrokenSink())
+
+
+def fallback_lines(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def test_audit_failure_blocks_the_result(monkeypatch, tmp_path, caplog):
+    empty_sets(monkeypatch)
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    server, _ = build(audit_sink=BrokenSink(), fallback_audit=fallback)
 
     with caplog.at_level(logging.ERROR, logger="eaia.mcp.audit"):
         result = call(server, "list_investigations", {})
 
-    assert result.is_error is False
+    text = result.content[0].text
+    assert result.is_error is True
+    assert "blocked because it could not be written to the audit log" in text
+    assert "accept_unaudited=true" in text
+    assert UUID_PATTERN.search(text)
+    assert "hunter2" not in text and "database down" not in text
     assert "Audit write failed" in caplog.text
+    lines = fallback_lines(fallback.path)
+    assert [line["event"] for line in lines] == ["audit_refused"]
+    assert lines[0]["correlation_id"] in text
+    assert lines[0]["audit_db_error_class"] == "RuntimeError"
+
+
+def test_override_returns_answer_marked_unaudited(monkeypatch, tmp_path):
+    empty_sets(monkeypatch)
+    sink = BrokenSink()
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    server, _ = build(audit_sink=sink, fallback_audit=fallback)
+
+    async def scenario(client):
+        first = await client.call_tool("list_investigations", {})
+        second = await client.call_tool("list_investigations", {"accept_unaudited": True})
+        return first, second
+
+    first, second = run_client(server, scenario)
+
+    assert first.is_error is True
+    assert second.is_error is False
+    assert sink.attempts == 2  # the override call tried the audit table again
+    assert second.content[0].text.startswith("UNAUDITED:")
+    assert second.structured_content == {"document_sets": []}
+    assert second.meta["eaia/audit"]["audited"] is False
+    events = fallback_lines(fallback.path)
+    assert [e["event"] for e in events] == ["audit_refused", "unaudited_override"]
+    assert events[1]["correlation_id"] == second.meta["eaia/audit"]["reference"]
+    assert "accept_unaudited" not in events[1]["arguments"]
+
+
+def test_override_is_audited_normally_when_the_database_is_back(monkeypatch, tmp_path):
+    empty_sets(monkeypatch)
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    server, sink = build(fallback_audit=fallback)
+
+    result = call(server, "list_investigations", {"accept_unaudited": True})
+
+    assert result.is_error is False
+    assert result.meta is None or "eaia/audit" not in result.meta
+    assert sink.records[-1].outcome == "ok"
+    assert sink.records[-1].detail == "accept_unaudited requested"
+    assert fallback_lines(fallback.path) == []
+
+
+def test_override_disabled_is_a_hard_failure(monkeypatch, tmp_path):
+    empty_sets(monkeypatch)
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    config = settings.model_copy(update={"mcp_audit_allow_unaudited_override": False})
+    server, _ = build(audit_sink=BrokenSink(), fallback_audit=fallback, config=config)
+
+    async def scenario(client):
+        return (
+            await client.call_tool("list_investigations", {}),
+            await client.call_tool("list_investigations", {"accept_unaudited": True}),
+        )
+
+    first, second = run_client(server, scenario)
+
+    assert first.is_error and second.is_error
+    assert "Overrides are disabled" in first.content[0].text
+    assert "accept_unaudited=true" not in first.content[0].text
+    assert [e["event"] for e in fallback_lines(fallback.path)] == ["audit_refused", "audit_refused"]
+
+
+def test_override_without_a_durable_fallback_is_refused(monkeypatch, tmp_path):
+    empty_sets(monkeypatch)
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("")
+    fallback = FallbackAuditFile(blocker / "fallback.jsonl")  # parent is a file, so append fails
+    server, _ = build(audit_sink=BrokenSink(), fallback_audit=fallback)
+
+    result = call(server, "list_investigations", {"accept_unaudited": True})
+
+    assert result.is_error is True
+    assert "fallback audit file are both unavailable" in result.content[0].text
+
+
+def test_override_on_a_failing_call_returns_the_error_marked_unaudited(tmp_path):
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    server, _ = build(audit_sink=BrokenSink(), fallback_audit=fallback)
+
+    arguments = {"question": "Key risks?", "llm_provider": "openai", "llm_model": "nope", "accept_unaudited": True}
+    result = call(server, "ask_advisor", arguments)
+
+    assert result.is_error is True
+    assert "Model not allowed" in result.content[0].text
+    assert "UNAUDITED" in result.content[0].text
+    assert fallback_lines(fallback.path)[0]["outcome"] == "denied"
+
+
+def test_resources_and_prompts_have_no_override(monkeypatch, tmp_path):
+    empty_sets(monkeypatch)
+    fallback = FallbackAuditFile(tmp_path / "fallback.jsonl")
+    server, _ = build(audit_sink=BrokenSink(), fallback_audit=fallback)
+
+    async def scenario(client):
+        prompt_error = resource_error = None
+        try:
+            await client.get_prompt("board_meeting_prep", {"document_set_id": "abc"})
+        except BaseException as exc:  # noqa: BLE001
+            prompt_error = str(exc)
+        try:
+            await client.read_resource("eaia://investigations")
+        except BaseException as exc:  # noqa: BLE001
+            resource_error = str(exc)
+        return prompt_error, resource_error
+
+    prompt_error, resource_error = run_client(server, scenario)
+
+    assert prompt_error is not None  # the SDK reports prompt failures as a generic error
+    assert "could not be written to the audit log" in resource_error
+    assert "A resource cannot be overridden" in resource_error
+    assert "accept_unaudited=true" not in resource_error
+    assert [e["event"] for e in fallback_lines(fallback.path)] == ["audit_refused", "audit_refused"]
+
+
+def test_every_tool_accepts_the_override_argument():
+    server, _ = build()
+
+    tools = run_client(server, lambda c: c.list_tools())
+
+    for tool in tools.tools:
+        assert tool.input_schema["properties"]["accept_unaudited"]["default"] is False, tool.name
+
+
+def test_fallback_file_appends_and_never_truncates(tmp_path):
+    fallback = FallbackAuditFile(tmp_path / "audit" / "fallback.jsonl")
+    record = AuditRecord(correlation_id=uuid4(), client_id="c", transport="stdio", kind="tool", name="t")
+    fallback.append("audit_refused", record, "OperationalError")
+    fallback.append("unaudited_override", record, None)
+    lines = fallback_lines(fallback.path)
+    assert [line["event"] for line in lines] == ["audit_refused", "unaudited_override"]
+    assert oct(fallback.path.stat().st_mode & 0o777) == "0o600"
