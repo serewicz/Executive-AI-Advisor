@@ -33,6 +33,25 @@ class Settings(BaseSettings):
     max_embedding_text_chars: int = Field(default=12000, alias="MAX_EMBEDDING_TEXT_CHARS")
     max_search_query_chars: int = Field(default=2000, alias="MAX_SEARCH_QUERY_CHARS")
 
+    # MCP server (see docs/adr/0001-mcp-hardening-and-audit-log.md)
+    mcp_auth_tokens: str | None = Field(default=None, alias="MCP_AUTH_TOKENS")
+    mcp_allow_insecure_bind: bool = Field(default=False, alias="MCP_ALLOW_INSECURE_BIND")
+    mcp_model_policy_file: Path = Field(default=Path("config/models.yaml"), alias="MCP_MODEL_POLICY_FILE")
+    mcp_rate_limit_read_per_minute: int = Field(default=60, ge=1, alias="MCP_RATE_LIMIT_READ_PER_MINUTE")
+    mcp_rate_limit_llm_per_minute: int = Field(default=10, ge=1, alias="MCP_RATE_LIMIT_LLM_PER_MINUTE")
+    mcp_rate_limit_llm_per_day: int = Field(default=200, ge=1, alias="MCP_RATE_LIMIT_LLM_PER_DAY")
+    mcp_audit_store_text: bool = Field(default=False, alias="MCP_AUDIT_STORE_TEXT")
+    # HMAC key for free-text audit hashes. Required for HTTP on a non-loopback host.
+    mcp_audit_hash_key: str | None = Field(default=None, alias="MCP_AUDIT_HASH_KEY")
+    # Fail-closed audit (ADR 0001). false = no override; an unaudited call always fails.
+    mcp_audit_allow_unaudited_override: bool = Field(default=True, alias="MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE")
+    # After an audit write failure, refuse model tools for this many seconds before calling the
+    # provider, unless the caller passes accept_unaudited. 0 turns the breaker off.
+    mcp_audit_breaker_seconds: int = Field(default=30, ge=0, alias="MCP_AUDIT_BREAKER_SECONDS")
+    mcp_audit_fallback_file: Path = Field(
+        default=Path("data/audit/mcp_audit_fallback.jsonl"), alias="MCP_AUDIT_FALLBACK_FILE"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

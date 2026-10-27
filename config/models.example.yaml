@@ -1,0 +1,57 @@
+# Model allowlist for MCP callers: the list of models this deployment may call.
+#
+# How to use: copy to config/models.yaml (or point MCP_MODEL_POLICY_FILE at your copy) and edit.
+# Step-by-step instructions, validation, and rollback:
+#   docs/runbooks/updating-model-list.md
+#
+# Rules the server enforces at startup (it refuses to start if any fails):
+#   - provider names must be one of: mock, openai, anthropic, grok
+#   - each provider needs at least one entry under `models`
+#
+# Rules the server enforces on every call:
+#   - a caller's llm_provider + llm_model pair must appear below, or the call is denied
+#     before any provider is contacted
+#   - when a caller omits llm_model, the provider's default from the environment
+#     (OPENAI_CHAT_MODEL, ANTHROPIC_CHAT_MODEL, XAI_CHAT_MODEL) is used,
+#     so that default must also be listed here. The shipped defaults gpt-4o-mini and
+#     claude-3-5-sonnet-latest are not in this list; set OPENAI_CHAT_MODEL and
+#     ANTHROPIC_CHAT_MODEL to a listed model when you copy this file.
+#
+# Model IDs and dates below were checked against each provider's public model page on
+# 2026-10-25. Providers retire models on their own schedule. Re-check before relying on
+# this list and update `as_of` when you do.
+#
+# ADR 0002 (issue #24) will extend this file with routes and fallback settings.
+
+as_of: "2026-10-25"
+
+providers:
+  mock:
+    models:
+      - id: mock
+        notes: Deterministic offline provider for tests and demos. No network calls.
+
+  openai:
+    models:
+      - id: gpt-6-luna
+        notes: Lowest-cost current model.
+      - id: gpt-6.1-sol
+        notes: Mid-cost. Use for board briefs and diligence reports when luna output is thin.
+      # - id: gpt-6-astra
+      #   notes: Highest cost (about 100x luna per token as of 2026-10-25). Enable on purpose.
+
+  anthropic:
+    models:
+      - id: claude-haiku-5-5
+        notes: Lowest-cost current model.
+      - id: claude-sonnet-5-5
+        notes: Mid-cost.
+      # - id: claude-opus-5-5
+      #   notes: Higher cost. Enable on purpose.
+
+  grok:
+    models:
+      - id: grok-4.7
+        notes: Current xAI flagship as of 2026-10-25.
+      - id: grok-4.3
+        notes: Older model kept because XAI_CHAT_MODEL defaults to it.
