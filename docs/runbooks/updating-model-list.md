@@ -1,6 +1,6 @@
 # Updating the model list
 
-The MCP server calls only the models listed in `config/models.yaml`. This runbook covers adding a model, retiring one, checking the file, testing, and rolling back. Design: [ADR 0001](../adr/0001-mcp-hardening-and-audit-log.md), section 2.
+The MCP server calls only the models listed in `config/models.yaml`. This runbook covers adding a model, retiring one, adding a local model, checking the file, testing, and rolling back. Design: [ADR 0001](../adr/0001-mcp-hardening-and-audit-log.md), section 2.
 
 Do this when a provider releases or retires a model, when you change a default model in the environment, or at least once a quarter. The `as_of` date at the top of the file tells you when the list was last checked.
 
@@ -16,11 +16,15 @@ providers:
       - id: gpt-6-luna       # exact model ID the provider's API accepts
         notes: Lowest-cost current model. Default for routine summaries.
       - id: gpt-6.1-sol
+  local:
+    base_url: http://127.0.0.1:11434/v1   # must equal LOCAL_LLM_BASE_URL
+    models:
+      - id: llama3.2:3b
 ```
 
 Rules:
 
-- Providers: `mock`, `openai`, `anthropic`, `grok`. Any other name stops the server.
+- Providers: `mock`, `openai`, `anthropic`, `grok`, `local`. Any other name stops the server.
 - Each provider needs at least one model. To turn a provider off, delete its block.
 - Unknown keys stop the server. This catches typos.
 - `id` must match the provider's API ID exactly. A display name such as "GPT-6 Luna" will not work.
@@ -49,9 +53,57 @@ Rules:
    | openai | `OPENAI_CHAT_MODEL` |
    | anthropic | `ANTHROPIC_CHAT_MODEL` |
    | grok | `XAI_CHAT_MODEL` |
+   | local | `LOCAL_LLM_MODEL` |
 
    The default must be in the list, or calls that omit `llm_model` are denied.
 5. Validate (next section), then restart the MCP server. The file is read at startup only.
+
+## Add a local LLM or SLM
+
+Provider `local` sends chat requests to any server that speaks the OpenAI chat-completions API. No vendor key is needed and documents stay on your network. Example with Ollama:
+
+1. Install and start the model server, and pull a model:
+
+   ```bash
+   ollama pull llama3.2:3b
+   ollama serve            # listens on 127.0.0.1:11434
+   ```
+
+   llama.cpp server (`llama-server`) and vLLM work the same way. Use the URL that ends in `/v1`.
+2. Check that the server answers:
+
+   ```bash
+   curl -s http://127.0.0.1:11434/v1/models
+   ```
+
+   Use the model ID exactly as it appears in that output.
+3. Set the environment in `.env`:
+
+   ```bash
+   LOCAL_LLM_BASE_URL=http://127.0.0.1:11434/v1
+   LOCAL_LLM_MODEL=llama3.2:3b
+   LOCAL_LLM_API_KEY=            # only if your server requires one
+   ```
+
+4. Add or edit the `local` block in `config/models.yaml`. `base_url` must equal `LOCAL_LLM_BASE_URL` (a trailing `/` is ignored), or the server does not start. If `LOCAL_LLM_BASE_URL` is set and the block has no `base_url`, the server does not start either. Always set both. This stops a changed environment variable from sending evidence to a host nobody reviewed.
+
+   ```yaml
+   local:
+     base_url: http://127.0.0.1:11434/v1
+     models:
+       - id: llama3.2:3b
+         notes: Small model on the advisor host. Drafts only.
+       - id: qwen3:14b
+         notes: Larger local model for board summaries.
+   ```
+
+5. Validate and restart.
+
+Choosing a local model:
+
+- The advisor asks for JSON output. Some OpenAI-compatible servers ignore `response_format`, and small models (1-3B parameters) often return malformed JSON on long prompts. The tool then returns an error with a reference ID, after the tokens are spent. Run one real `board_brief` call against each model before you list it.
+- Context length must fit the retrieved evidence plus the prompt. 8k tokens is a working minimum.
+- The advisor sends retrieved document excerpts to `LOCAL_LLM_BASE_URL`. "Local" is the API style, not a guarantee of location. If the server is on another host, use TLS or a private network, and treat the host as holding your documents.
 
 ## Validate
 

@@ -43,8 +43,8 @@ LLM_PROVIDER_OPTIONS = {
 }
 DEFAULT_LLM_MODELS = {
     "mock": "mock",
-    "openai": "gpt-4o-mini",
-    "anthropic": "claude-3-5-sonnet-latest",
+    "openai": "gpt-6.1-sol",
+    "anthropic": "claude-sonnet-5-5",
     "grok": "grok-4.3",
 }
 READY_DOCUMENT_STATUSES = {"embedded", "indexed"}

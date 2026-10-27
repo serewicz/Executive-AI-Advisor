@@ -59,6 +59,7 @@ The MCP server (`python -m app.mcp_server`) exposes read-only tools, some of whi
 | Canned mock output mistaken for advice | `mock` allowed only when `LLM_PROVIDER=mock`; output labeled `MOCK OUTPUT` |
 | Malformed IDs posing as audit outages | Investigation IDs validated before the audit insert |
 | Calls go unrecorded during a database outage | Fail closed: results are withheld. A tool caller can re-call with `accept_unaudited=true`; the override is synced to an append-only fallback file before the result, marked `UNAUDITED`, is returned. `MCP_AUDIT_ALLOW_UNAUDITED_OVERRIDE=false` removes the override |
+| Evidence sent to an unapproved model host | `LOCAL_LLM_BASE_URL` must equal `providers.local.base_url` in `config/models.yaml`; if the variable is set without the pin, the server does not start |
 | Audit tampering | Triggers block UPDATE, DELETE, TRUNCATE; run the server as a non-owner role for stronger protection |
 
 Configuration and procedures: [MCP operations runbook](runbooks/mcp-operations.md).

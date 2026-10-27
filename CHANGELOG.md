@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP audit writes fail closed: if the audit record cannot be written, the result is withheld and the caller gets a reference ID and the override instructions
 - **Breaking:** MCP audit free text is hashed with HMAC-SHA256 (`hmac_sha256` field) instead of SHA-256 (`sha256`). HTTP on a non-loopback host requires `MCP_AUDIT_HASH_KEY`. Queries on the old field must change
 - The MCP `mock` provider is allowed only when `LLM_PROVIDER=mock`, and its output is labeled
+- Default chat models: `OPENAI_CHAT_MODEL` is now `gpt-6.1-sol` and `ANTHROPIC_CHAT_MODEL` is now `claude-sonnet-5-5`. The previous Anthropic default was retired by the provider. For the cheap tier, pass `llm_model=gpt-6-luna` or `claude-haiku-5-5`
+- The MCP server refuses to start when `LOCAL_LLM_BASE_URL` is set and `config/models.yaml` does not pin `providers.local.base_url`
 - Document-set helpers moved from the API routes to `app/services/document_sets.py`
 
 ### Fixed

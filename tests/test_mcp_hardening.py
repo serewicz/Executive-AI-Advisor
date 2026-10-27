@@ -335,6 +335,7 @@ def test_example_policy_file_is_valid():
     policy = load_model_policy(settings, ROOT / "config" / "models.example.yaml")
     assert policy.is_allowed("mock", "mock")
     assert policy.as_of == "2026-10-25"
+    assert policy.is_allowed("local", "llama3.2:3b")
     assert not policy.is_allowed("openai", "gpt-6-astra")  # commented out on purpose
 
 
@@ -354,7 +355,7 @@ def test_model_entries_with_notes(tmp_path):
     [
         "providers:\n  openai:\n    models: []\n",
         "providers:\n  openai:\n    models:\n      - id: x\n        price: 1\n",
-        "providers:\n  local:\n    models:\n      - id: x\n",
+        "providers:\n  local:\n    base_url: http://10.0.0.5:8000/v1\n    models:\n      - id: x\n",
     ],
 )
 def test_model_entries_reject_bad_input(tmp_path, content):
@@ -362,6 +363,18 @@ def test_model_entries_reject_bad_input(tmp_path, content):
     path.write_text(content)
     with pytest.raises(ModelPolicyError):
         load_model_policy(settings, path)
+
+
+def test_local_provider_is_routed_and_allowlisted(monkeypatch):
+    from app.advisor.providers.factory import get_llm_provider
+    from app.advisor.providers.local_provider import LocalChatProvider
+
+    get_llm_provider.cache_clear()
+    provider = get_llm_provider("local")
+    assert isinstance(provider, LocalChatProvider)
+    client = provider._client(None)
+    assert str(client.base_url).rstrip("/") == settings.local_llm_base_url.rstrip("/")
+    get_llm_provider.cache_clear()
 
 
 def test_policy_check_command(tmp_path, capsys):
@@ -1034,3 +1047,51 @@ def test_unaudited_mock_output_carries_both_labels(monkeypatch, tmp_path):
     texts = [block.text for block in result.content]
     assert texts[0].startswith("UNAUDITED:") and texts[1].startswith("MOCK OUTPUT:")
     assert result.meta["eaia/audit"]["audited"] is False and result.meta["eaia/mock"] is True
+
+
+# ------------------------------------------------------------------ local provider pin and defaults
+
+
+def _settings_with_local_url(url: str):
+    from app.core.config import Settings
+
+    return Settings(_env_file=None, LOCAL_LLM_BASE_URL=url)
+
+
+def test_local_base_url_without_a_policy_file_refuses_to_start(tmp_path):
+    with pytest.raises(ModelPolicyError, match="LOCAL_LLM_BASE_URL is set"):
+        load_model_policy(_settings_with_local_url("http://10.0.0.5:8000/v1"), tmp_path / "missing.yaml")
+
+
+def test_local_base_url_without_a_pin_refuses_to_start(tmp_path):
+    path = tmp_path / "models.yaml"
+    path.write_text("providers:\n  local:\n    models:\n      - id: x\n")
+    with pytest.raises(ModelPolicyError, match="no providers.local.base_url"):
+        load_model_policy(_settings_with_local_url("http://10.0.0.5:8000/v1"), path)
+
+
+def test_local_base_url_with_a_matching_pin_starts(tmp_path):
+    path = tmp_path / "models.yaml"
+    path.write_text("providers:\n  local:\n    base_url: http://10.0.0.5:8000/v1/\n    models:\n      - id: x\n")
+    policy = load_model_policy(_settings_with_local_url("http://10.0.0.5:8000/v1"), path)
+    assert policy.is_allowed("local", "x")
+
+
+def test_unset_local_base_url_needs_no_pin(tmp_path):
+    from app.core.config import Settings
+
+    config = Settings(_env_file=None)
+    assert "local_llm_base_url" not in config.model_fields_set
+    assert load_model_policy(config, tmp_path / "missing.yaml").source == "environment"
+
+
+def test_default_models_are_in_the_example_list():
+    from app.core.config import Settings
+    from app.mcp_server.model_policy import env_default_gaps
+
+    config = Settings(_env_file=None)
+    assert config.openai_chat_model == "gpt-6.1-sol"
+    assert config.anthropic_chat_model == "claude-sonnet-5-5"
+    policy = load_model_policy(config, ROOT / "config" / "models.example.yaml")
+    gaps = [gap for gap in env_default_gaps(policy, config) if not gap.startswith("grok")]
+    assert gaps == []
